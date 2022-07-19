@@ -133,7 +133,7 @@ def train():
     train_file_data = GrpFileDatasetsIter(
         file_list = train_file_list,
         file_batch_size = cfg['dataset']['file_batch_size'],
-        cycle = True,
+        cycle = False,
     )
     train_data_loader = iter(DataLoader(
         dataset = train_file_data,
@@ -245,6 +245,8 @@ def train():
     pb.close()
 
 if __name__ == '__main__':
+    import torch.multiprocessing as mp
+    mp.set_start_method('spawn')
     try:
         train()
     except KeyboardInterrupt:
