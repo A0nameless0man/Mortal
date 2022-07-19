@@ -39,7 +39,7 @@ def main():
             enable_rule_based_agari_guard = cfg['champion']['enable_rule_based_agari_guard'],
             name = cfg['champion']['name'],
         )
-    if not all_akochan:
+    if use_akochan and not all_akochan:
         mortal = Brain(False, **config['resnet']).eval()
         dqn = DQN().eval()
         state = torch.load(cfg['challenger']['state_file'], map_location=torch.device('cpu'))
