@@ -83,6 +83,7 @@ def collate(batch):
 def train():
     cfg = config['grp']
     batch_size = cfg['control']['batch_size']
+    train_batch = cfg['control']['train_batch']
     save_every = cfg['control']['save_every']
     val_steps = cfg['control']['val_steps']
 
@@ -133,7 +134,7 @@ def train():
     train_file_data = GrpFileDatasetsIter(
         file_list = train_file_list,
         file_batch_size = cfg['dataset']['file_batch_size'],
-        cycle = False,
+        cycle = True,
     )
     train_data_loader = iter(DataLoader(
         dataset = train_file_data,
@@ -242,6 +243,8 @@ def train():
             }
             torch.save(state, state_file)
             pb = tqdm(total=save_every, desc='TRAIN', unit='batch', dynamic_ncols=True, ascii=True)
+            if steps >= train_batch:
+                break
     pb.close()
 
 if __name__ == '__main__':
