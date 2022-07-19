@@ -10,5 +10,6 @@ __pycache__
 
 .ipynb_checkpoints
 *.ipynb
-
+*.json.gz
+events.out.tfevents.*
 /_draft
