@@ -100,7 +100,6 @@ enable_amp = true
 enable_rule_based_agari_guard = true
 
 [1v3.akochan]
-all = false
 enabled = false
 dir = '/path/to/akochan'
 tactics = '/path/to/tactics.json'
