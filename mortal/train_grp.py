@@ -145,13 +145,13 @@ def train():
             val_file_list.extend(glob(pat, recursive=True))
         train_file_list.sort(reverse=True)
         val_file_list.sort(reverse=True)
+        if check:
+            check_files(val_file_list)
+            check_files(train_file_list)
         torch.save(
             {"train_file_list": train_file_list, "val_file_list": val_file_list},
             file_index,
         )
-    if check:
-        check_files(val_file_list)
-        check_files(train_file_list)
     writer = SummaryWriter(cfg["control"]["tensorboard_dir"])
 
     train_file_data = GrpFileDatasetsIter(
@@ -288,7 +288,7 @@ def train():
                 dynamic_ncols=True,
                 ascii=True,
             )
-            if steps >= train_batch:
+            if train_batch != 0 and steps >= train_batch:
                 break
     pb.close()
 

@@ -13,5 +13,6 @@ __pycache__
 /_draft
 
 #ignore data files
+data
 *.json.gz
 events.out.tfevents.*
