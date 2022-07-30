@@ -122,6 +122,8 @@ save_every = 2000
 val_steps = 400
 train_batch = 20000
 
+check = false
+
 [grp.dataset]
 train_globs = [
     '/path/to/dataset/2019/**/*.json.gz',

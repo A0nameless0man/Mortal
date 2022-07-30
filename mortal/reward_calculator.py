@@ -1,9 +1,10 @@
 import torch
 import numpy as np
 
+
 class RewardCalculator:
     def __init__(self, grp=None, pts=None, uniform_init=False, use_score=False):
-        self.device = torch.device('cpu')
+        self.device = torch.device("cpu")
         self.use_score = use_score
         if not use_score:
             self.grp = grp.to(self.device).eval()
@@ -14,12 +15,14 @@ class RewardCalculator:
 
     def calc_delta_grp(self, player_id, grp_feature, rank_by_player, final_scores):
         final_ranking = torch.zeros((1, 4), device=self.device)
-        final_ranking[0, rank_by_player[player_id]] = 1.
+        final_ranking[0, rank_by_player[player_id]] = 1.0
 
-        seq = list(map(
-            lambda idx: torch.as_tensor(grp_feature[:idx+1], device=self.device),
-            range(len(grp_feature)),
-        ))
+        seq = list(
+            map(
+                lambda idx: torch.as_tensor(grp_feature[: idx + 1], device=self.device),
+                range(len(grp_feature)),
+            )
+        )
 
         with torch.no_grad():
             logits = self.grp(seq)
@@ -34,7 +37,9 @@ class RewardCalculator:
         return reward.cpu().numpy()
 
     def calc_delta_points(self, player_id, grp_feature, rank_by_player, final_scores):
-        seq = np.concatenate((grp_feature[:, 3 + player_id] * 1e5, final_scores[player_id]))
+        seq = np.concatenate(
+            (grp_feature[:, 3 + player_id] * 1e5, final_scores[player_id])
+        )
         delta_points = seq[1:] - seq[:-1]
         return delta_points
 

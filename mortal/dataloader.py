@@ -7,15 +7,16 @@ from reward_calculator import RewardCalculator
 from libriichi.dataset import GameplayLoader
 from config import config
 
+
 class FileDatasetsIter(IterableDataset):
     def __init__(
         self,
         file_list,
         pts,
-        file_batch_size = 20, # hint: around 650 instances per file
-        quality_threshold = 0,
-        player_name = None,
-        excludes = None,
+        file_batch_size=20,  # hint: around 650 instances per file
+        quality_threshold=0,
+        player_name=None,
+        excludes=None,
     ):
         super().__init__()
         self.file_list = file_list
@@ -28,12 +29,16 @@ class FileDatasetsIter(IterableDataset):
         self.iterator = None
 
     def build_iter(self):
-        self.loader = GameplayLoader(oracle=True, player_name=self.player_name, excludes=self.excludes)
+        self.loader = GameplayLoader(
+            oracle=True, player_name=self.player_name, excludes=self.excludes
+        )
 
         # do not put it in __init__, it won't work on Windows
-        grp = GRP(**config['grp']['network'])
-        grp_state = torch.load(config['grp']['state_file'], map_location=torch.device('cpu'))
-        grp.load_state_dict(grp_state['model'])
+        grp = GRP(**config["grp"]["network"])
+        grp_state = torch.load(
+            config["grp"]["state_file"], map_location=torch.device("cpu")
+        )
+        grp.load_state_dict(grp_state["model"])
         self.reward_calc = RewardCalculator(grp, self.pts)
 
         random.shuffle(self.file_list)
@@ -45,7 +50,7 @@ class FileDatasetsIter(IterableDataset):
             self.buffer.clear()
 
     def populate_buffer(self, start_idx):
-        file_list = self.file_list[start_idx:start_idx + self.file_batch_size]
+        file_list = self.file_list[start_idx : start_idx + self.file_batch_size]
         data = self.loader.load_gz_log_files(file_list)
 
         for game in data:
@@ -67,7 +72,9 @@ class FileDatasetsIter(IterableDataset):
             grp_feature = grp.take_feature()
             rank_by_player = grp.take_rank_by_player()
             final_scores = grp.take_final_scores()
-            kyoku_rewards = self.reward_calc(player_id, grp_feature, rank_by_player, final_scores)
+            kyoku_rewards = self.reward_calc(
+                player_id, grp_feature, rank_by_player, final_scores
+            )
 
             steps_to_done = np.zeros(game_size, dtype=np.int64)
             for i in reversed(range(game_size)):
@@ -89,6 +96,7 @@ class FileDatasetsIter(IterableDataset):
         if self.iterator is None:
             self.iterator = self.build_iter()
         return self.iterator
+
 
 def worker_init_fn(*args, **kwargs):
     worker_info = torch.utils.data.get_worker_info()

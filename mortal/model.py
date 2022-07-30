@@ -7,6 +7,7 @@ from itertools import permutations
 from libriichi.consts import OBS_SHAPE, ORACLE_OBS_SHAPE, ACTION_SPACE, GRP_SIZE
 from common import apply_masks
 
+
 class ChannelAttention(nn.Module):
     def __init__(self, channels, ratio=16):
         super().__init__()
@@ -26,6 +27,7 @@ class ChannelAttention(nn.Module):
         out = torch.sigmoid(avg_out + max_out).unsqueeze(-1)
         return out
 
+
 class ResBlock(nn.Module):
     def __init__(self, channels, enable_bn, bn_momentum):
         super().__init__()
@@ -35,10 +37,14 @@ class ResBlock(nn.Module):
 
         self.res_unit = nn.Sequential(
             nn.Conv1d(channels, channels, kernel_size=3, padding=1, bias=not enable_bn),
-            nn.BatchNorm1d(channels, momentum=tch_bn_momentum) if enable_bn else nn.Identity(),
+            nn.BatchNorm1d(channels, momentum=tch_bn_momentum)
+            if enable_bn
+            else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv1d(channels, channels, kernel_size=3, padding=1, bias=not enable_bn),
-            nn.BatchNorm1d(channels, momentum=tch_bn_momentum) if enable_bn else nn.Identity(),
+            nn.BatchNorm1d(channels, momentum=tch_bn_momentum)
+            if enable_bn
+            else nn.Identity(),
         )
         self.ca = ChannelAttention(channels)
 
@@ -49,6 +55,7 @@ class ResBlock(nn.Module):
         out = F.relu(out, inplace=True)
         return out
 
+
 class ResNet(nn.Module):
     def __init__(self, in_channels, conv_channels, num_blocks, enable_bn, bn_momentum):
         super().__init__()
@@ -58,11 +65,17 @@ class ResNet(nn.Module):
 
         blocks = []
         for _ in range(num_blocks):
-            blocks.append(ResBlock(conv_channels, enable_bn=enable_bn, bn_momentum=bn_momentum))
+            blocks.append(
+                ResBlock(conv_channels, enable_bn=enable_bn, bn_momentum=bn_momentum)
+            )
 
         self.net = nn.Sequential(
-            nn.Conv1d(in_channels, conv_channels, kernel_size=3, padding=1, bias=not enable_bn),
-            nn.BatchNorm1d(conv_channels, momentum=tch_bn_momentum) if enable_bn else nn.Identity(),
+            nn.Conv1d(
+                in_channels, conv_channels, kernel_size=3, padding=1, bias=not enable_bn
+            ),
+            nn.BatchNorm1d(conv_channels, momentum=tch_bn_momentum)
+            if enable_bn
+            else nn.Identity(),
             nn.ReLU(inplace=True),
             *blocks,
             nn.Conv1d(conv_channels, 32, kernel_size=3, padding=1),
@@ -73,6 +86,7 @@ class ResNet(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
 
 class Brain(nn.Module):
     def __init__(self, is_oracle, conv_channels, num_blocks, enable_bn, bn_momentum):
@@ -86,10 +100,10 @@ class Brain(nn.Module):
             bn_momentum = None
         self.encoder = ResNet(
             in_channels,
-            conv_channels = conv_channels,
-            num_blocks = num_blocks,
-            enable_bn = enable_bn,
-            bn_momentum = bn_momentum,
+            conv_channels=conv_channels,
+            num_blocks=num_blocks,
+            enable_bn=enable_bn,
+            bn_momentum=bn_momentum,
         )
 
         self.latent_net = nn.Sequential(
@@ -132,6 +146,7 @@ class Brain(nn.Module):
         self._freeze_bn = flag
         return self.train(self.training)
 
+
 class DQN(nn.Module):
     def __init__(self):
         super().__init__()
@@ -142,16 +157,22 @@ class DQN(nn.Module):
         v = self.v_head(latent)
         a = self.a_head(latent)
 
-        a_sum = apply_masks(a, mask, fill=0.).sum(-1, keepdim=True)
+        a_sum = apply_masks(a, mask, fill=0.0).sum(-1, keepdim=True)
         mask_sum = mask.sum(-1, keepdim=True)
         a_mean = a_sum / mask_sum
         q = apply_masks(v + a - a_mean, mask)
         return q
 
+
 class GRP(nn.Module):
     def __init__(self, hidden_size=64, num_layers=2):
         super().__init__()
-        self.rnn = nn.GRU(input_size=GRP_SIZE, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        self.rnn = nn.GRU(
+            input_size=GRP_SIZE,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+        )
         self.fc = nn.Sequential(
             nn.Linear(hidden_size * num_layers, hidden_size * num_layers),
             nn.ReLU(inplace=True),
@@ -163,8 +184,8 @@ class GRP(nn.Module):
         # perms are the permutations of all possible rank-by-player result
         perms = torch.tensor(list(permutations(range(4))))
         perms_t = perms.transpose(0, 1)
-        self.register_buffer('perms', perms)     # (24, 4)
-        self.register_buffer('perms_t', perms_t) # (4, 24)
+        self.register_buffer("perms", perms)  # (24, 4)
+        self.register_buffer("perms_t", perms_t)  # (4, 24)
 
     # input: [grand_kyoku, honba, kyotaku, s[0], s[1], s[2], s[3]]
     # grand_kyoku: E1 = 0, S4 = 7, W4 = 11
@@ -173,7 +194,9 @@ class GRP(nn.Module):
     def forward(self, inputs):
         lengths = torch.tensor([t.shape[0] for t in inputs], dtype=torch.int64)
         inputs = pad_sequence(inputs, batch_first=True)
-        packed_inputs = pack_padded_sequence(inputs, lengths, batch_first=True, enforce_sorted=False)
+        packed_inputs = pack_padded_sequence(
+            inputs, lengths, batch_first=True, enforce_sorted=False
+        )
         return self.forward_packed(packed_inputs)
 
     def forward_packed(self, packed_inputs):

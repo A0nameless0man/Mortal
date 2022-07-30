@@ -3,22 +3,23 @@ import numpy as np
 from torch.distributions import Normal, Categorical
 from common import apply_masks
 
+
 class MortalEngine:
     def __init__(
         self,
         brain,
         dqn,
         is_oracle,
-        device = None,
-        stochastic_latent = False,
-        enable_amp = False,
-        enable_quick_eval = True,
-        enable_rule_based_agari_guard = False,
-        name = 'NoName',
-        boltzmann_epsilon = 0,
-        boltzmann_temp = 1,
+        device=None,
+        stochastic_latent=False,
+        enable_amp=False,
+        enable_quick_eval=True,
+        enable_rule_based_agari_guard=False,
+        name="NoName",
+        boltzmann_epsilon=0,
+        boltzmann_temp=1,
     ):
-        self.device = device or torch.device('cpu')
+        self.device = device or torch.device("cpu")
         assert isinstance(self.device, torch.device)
         self.brain = brain.to(self.device).eval()
         self.dqn = dqn.to(self.device).eval()
@@ -44,7 +45,9 @@ class MortalEngine:
         obs = torch.as_tensor(np.stack(obs, axis=0), device=self.device)
         masks = torch.as_tensor(np.stack(masks, axis=0), device=self.device)
         if self.is_oracle:
-            invisible_obs = torch.as_tensor(np.stack(invisible_obs, axis=0), device=self.device)
+            invisible_obs = torch.as_tensor(
+                np.stack(invisible_obs, axis=0), device=self.device
+            )
         else:
             invisible_obs = None
         batch_size = obs.shape[0]
@@ -57,7 +60,9 @@ class MortalEngine:
         q_out = self.dqn(latent, masks)
 
         if self.boltzmann_epsilon > 0:
-            is_greedy = torch.rand(batch_size, device=self.device) >= self.boltzmann_epsilon
+            is_greedy = (
+                torch.rand(batch_size, device=self.device) >= self.boltzmann_epsilon
+            )
             logits = apply_masks(q_out / self.boltzmann_temp, masks, fill=-1e9)
             actions = torch.where(
                 is_greedy,
