@@ -84,12 +84,14 @@ def collate(batch):
 
 
 def check_files(files):
-    for file in tqdm(files, desc="Checking files..."):
-        try:
-            Grp.load_gz_log_files([file])
-        except Exception as e:
-            print("Error loading {}".format(file))
-            os.remove(file)
+    with tqdm(desc="Error cnt", position=1) as error_cnt:
+        for file in tqdm(files, desc="Checking files..."):
+            try:
+                Grp.load_gz_log_files([file])
+            except Exception as e:
+                error_cnt.update()
+                print("Error loading {}".format(file))
+                os.remove(file)
 
 
 def train():
