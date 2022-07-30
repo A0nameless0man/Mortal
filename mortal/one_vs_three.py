@@ -16,10 +16,9 @@ def main():
     cfg = config["1v3"]
     games_per_iter = cfg["games_per_iter"]
     seeds_per_iter = games_per_iter // 4
-    iters = cfg["iters"]
-    log_dir = cfg["log_dir"]
-    use_akochan = cfg["akochan"]["enabled"]
-    all_akochan = cfg["akochan"]["all"]
+    iters = cfg['iters']
+    log_dir = cfg['log_dir']
+    use_akochan = cfg['akochan']['enabled']
 
     if use_akochan:
         os.environ["AKOCHAN_DIR"] = cfg["akochan"]["dir"]
@@ -44,26 +43,21 @@ def main():
             ],
             name=cfg["champion"]["name"],
         )
-    if use_akochan and not all_akochan:
-        mortal = Brain(False, **config["resnet"]).eval()
-        dqn = DQN().eval()
-        state = torch.load(
-            cfg["challenger"]["state_file"], map_location=torch.device("cpu")
-        )
-        mortal.load_state_dict(state["mortal"])
-        dqn.load_state_dict(state["current_dqn"])
-        engine_chal = MortalEngine(
-            mortal,
-            dqn,
-            is_oracle=False,
-            stochastic_latent=cfg["challenger"]["stochastic_latent"],
-            device=torch.device(cfg["challenger"]["device"]),
-            enable_amp=cfg["challenger"]["enable_amp"],
-            enable_rule_based_agari_guard=cfg["challenger"][
-                "enable_rule_based_agari_guard"
-            ],
-            name=cfg["challenger"]["name"],
-        )
+    mortal = Brain(False, **config['resnet']).eval()
+    dqn = DQN().eval()
+    state = torch.load(cfg['challenger']['state_file'], map_location=torch.device('cpu'))
+    mortal.load_state_dict(state['mortal'])
+    dqn.load_state_dict(state['current_dqn'])
+    engine_chal = MortalEngine(
+        mortal,
+        dqn,
+        is_oracle = False,
+        stochastic_latent = cfg['challenger']['stochastic_latent'],
+        device = torch.device(cfg['challenger']['device']),
+        enable_amp = cfg['challenger']['enable_amp'],
+        enable_rule_based_agari_guard = cfg['challenger']['enable_rule_based_agari_guard'],
+        name = cfg['challenger']['name'],
+    )
 
     seed_start = 10000
     for i, seed in enumerate(
@@ -76,17 +70,11 @@ def main():
             log_dir=log_dir,
         )
         if use_akochan:
-            if all_akochan:
-                rankings = env.ako_vs_ako(
-                    seed_start=(seed, key),
-                    seed_count=seeds_per_iter,
-                )
-            else:
-                rankings = env.ako_vs_py(
-                    engine=engine_chal,
-                    seed_start=(seed, key),
-                    seed_count=seeds_per_iter,
-                )
+            rankings = env.ako_vs_py(
+                engine = engine_chal,
+                seed_start = (seed, key),
+                seed_count = seeds_per_iter,
+            )
         else:
             rankings = env.py_vs_py(
                 challenger=engine_chal,
