@@ -84,14 +84,17 @@ def collate(batch):
 
 
 def check_files(files):
+    has_errors = False
     with tqdm(desc="Error cnt", position=1) as error_cnt:
         for file in tqdm(files, desc="Checking files..."):
             try:
                 Grp.load_gz_log_files([file])
-            except Exception as e:
+            except:
                 logging.error("Error loading {}".format(file))
                 error_cnt.update()
                 os.remove(file)
+                has_errors = True
+    return not has_errors
 
 
 def train():
@@ -146,8 +149,10 @@ def train():
         train_file_list.sort(reverse=True)
         val_file_list.sort(reverse=True)
         if check:
-            check_files(val_file_list)
-            check_files(train_file_list)
+            if not check_files(val_file_list):
+                return
+            if not check_files(train_file_list):
+                return
         torch.save(
             {"train_file_list": train_file_list, "val_file_list": val_file_list},
             file_index,

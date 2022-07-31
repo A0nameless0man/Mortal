@@ -23,6 +23,8 @@ def train():
     from model import Brain, DQN
     from config import config
 
+    from libriichi.dataset import GameplayLoader
+
     online = config["control"]["online"]
     batch_size = config["control"]["batch_size"]
     opt_step_every = config["control"]["opt_step_every"]
@@ -108,6 +110,20 @@ def train():
     )
     idx = 0
 
+    def check_files(files):
+        has_errors = False
+        with tqdm(desc="Error cnt", position=1) as error_cnt:
+            loader = GameplayLoader(oracle=True)
+            for file in tqdm(files, desc="Checking files..."):
+                try:
+                    loader.load_gz_log_files([file])
+                except:
+                    logging.error("Error loading {}".format(file))
+                    error_cnt.update()
+                    os.remove(file)
+                    has_errors = True
+        return not has_errors
+
     def train_epoch():
         nonlocal steps
         nonlocal stats_dqn_loss
@@ -132,6 +148,8 @@ def train():
                 for pat in config["dataset"]["globs"]:
                     file_list.extend(glob(pat, recursive=True))
                 file_list.sort(reverse=True)
+                if not check_files(file_list):
+                    return
                 torch.save({"file_list": file_list}, file_index)
         logging.info(f"file list size: {len(file_list):,}")
 
@@ -206,15 +224,26 @@ def train():
 
                     mu_mortal, logsig_mortal = mortal(obs)
                     dist_mortal = Normal(mu_mortal, logsig_mortal.exp())
-                    kld_loss = normal_kl_div(mu, logsig, mu_mortal, logsig_mortal).sum(-1).mean()
-                    beta_loss = log_beta * (log10_kld_target - kld_loss.detach().clamp(1e-9).log10())
+                    kld_loss = (
+                        normal_kl_div(mu, logsig, mu_mortal, logsig_mortal)
+                        .sum(-1)
+                        .mean()
+                    )
+                    beta_loss = log_beta * (
+                        log10_kld_target - kld_loss.detach().clamp(1e-9).log10()
+                    )
 
-                    loss = sum((
-                        dqn_loss,
-                        cql_loss * min_q_weight,
-                        kld_loss * log_beta.detach().exp(),
-                        beta_loss,
-                    )) / opt_step_every
+                    loss = (
+                        sum(
+                            (
+                                dqn_loss,
+                                cql_loss * min_q_weight,
+                                kld_loss * log_beta.detach().exp(),
+                                beta_loss,
+                            )
+                        )
+                        / opt_step_every
+                    )
             scaler.scale(loss).backward()
 
             with torch.no_grad():
