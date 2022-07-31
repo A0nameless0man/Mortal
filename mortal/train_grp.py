@@ -89,8 +89,8 @@ def check_files(files):
             try:
                 Grp.load_gz_log_files([file])
             except Exception as e:
+                logging.error("Error loading {}".format(file))
                 error_cnt.update()
-                print("Error loading {}".format(file))
                 os.remove(file)
 
 
