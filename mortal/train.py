@@ -403,9 +403,9 @@ def train():
         train_epoch()
         torch.cuda.empty_cache()
         gc.collect()
-        if not online:
-            # only run one epoch for offline for easier control
-            break
+        # if not online:
+        #     # only run one epoch for offline for easier control
+        #     break
 
 
 def main():
