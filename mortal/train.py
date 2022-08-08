@@ -17,11 +17,13 @@ def train():
     from torch.utils.data import DataLoader
     from torch.utils.tensorboard import SummaryWriter
     from tqdm.auto import tqdm
+    from tqdm.contrib.logging import logging_redirect_tqdm
     from common import normal_kl_div, submit_param, parameter_count, drain
     from player import TestPlayer
     from dataloader import FileDatasetsIter, worker_init_fn
     from model import Brain, DQN
     from config import config
+
 
     from libriichi.dataset import GameplayLoader
 
@@ -198,7 +200,10 @@ def train():
             masks = masks.to(dtype=torch.bool, device=device)
             steps_to_done = steps_to_done.to(dtype=torch.int64, device=device)
             kyoku_rewards = kyoku_rewards.to(dtype=torch.float64, device=device)
-            assert masks[range(batch_size), actions].all()
+            if not masks[range(batch_size), actions].all():
+                with logging_redirect_tqdm():
+                    logging.warn(f"Data error detected for step:{steps}")
+                continue
 
             q_target_mc = gamma**steps_to_done * kyoku_rewards
             q_target_mc = q_target_mc.to(torch.float32)
@@ -425,9 +430,9 @@ def train():
         train_epoch()
         torch.cuda.empty_cache()
         gc.collect()
-        # if not online:
-        #     # only run one epoch for offline for easier control
-        #     break
+        if not online:
+            # only run one epoch for offline for easier control
+            break
 
 
 def main():
