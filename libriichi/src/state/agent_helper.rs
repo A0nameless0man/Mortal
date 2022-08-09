@@ -213,7 +213,6 @@ impl PlayerState {
     }
 
     #[inline(never)]
-    #[cold]
     fn rule_based_ryukyoku_slow(&self) -> bool {
         // Do not ryukyoku if the hand is already <= 2 shanten.
         if shanten::calc_all(&self.tehai, self.tehai_len_div3) <= 2 {
@@ -260,14 +259,13 @@ impl PlayerState {
     #[inline]
     #[must_use]
     pub fn rule_based_agari(&self) -> bool {
-        if !self.last_cans.can_ron_agari && !self.last_cans.can_tsumo_agari {
+        if !self.last_cans.can_agari() {
             return false;
         }
         self.rule_based_agari_slow(self.last_cans.can_ron_agari, self.last_cans.target_actor)
     }
 
     #[inline(never)]
-    #[cold]
     fn rule_based_agari_slow(&self, is_ron: bool, target: u8) -> bool {
         // Agari if it is not yet all-last, or we are oya ourselves, or we are
         // not the last place at all.
@@ -278,7 +276,7 @@ impl PlayerState {
         if self.bakaze == t!(W) {
             // Agari if we are in the west round but it is not yet the real
             // all-last (W4).
-            if self.kyoku < 4 {
+            if self.kyoku < 3 {
                 return true;
             }
         } else if self.scores.iter().all(|&s| s < 30000) {

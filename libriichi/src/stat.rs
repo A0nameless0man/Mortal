@@ -5,6 +5,7 @@ use crate::vec_ops::vec_add_assign;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use derive_more::{Add, AddAssign, Sum};
@@ -436,9 +437,7 @@ impl Stat {
         scores.sort_by_key(|(_, s)| -s);
         let rank = scores
             .into_iter()
-            .enumerate()
-            .find(|(_, (id, _))| *id as u8 == player_id)
-            .map(|(r, _)| r)
+            .position(|(id, _)| id as u8 == player_id)
             .unwrap();
         match rank {
             0 => stat.rank_1 = 1,
@@ -460,13 +459,11 @@ impl Stat {
         let bar = if disable_progress_bar {
             ProgressBar::hidden()
         } else {
-            ProgressBar::new_spinner().with_style(
-                ProgressStyle::default_spinner()
-                    .template("{spinner:.cyan} [{elapsed_precise}] {pos} ({per_sec})")
-                    .tick_chars(".oOo"),
-            )
+            const TEMPLATE: &str = "{spinner:.cyan} [{elapsed_precise}] {pos} ({per_sec})";
+            ProgressBar::new_spinner()
+                .with_style(ProgressStyle::with_template(TEMPLATE)?.tick_chars(".oOo"))
         };
-        bar.enable_steady_tick(150);
+        bar.enable_steady_tick(Duration::from_millis(150));
 
         let stat = glob(&format!("{dir}/**/*.json"))?
             .chain(glob(&format!("{dir}/**/*.json.gz"))?)
