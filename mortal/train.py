@@ -198,7 +198,6 @@ def train():
             steps_to_done,
             kyoku_rewards,
         ) in data_loader:
-            logging.info(f"start")
             obs = obs.to(dtype=torch.float32, device=device)
             if not online:
                 invisible_obs = invisible_obs.to(
@@ -215,7 +214,6 @@ def train():
 
             q_target_mc = gamma**steps_to_done * kyoku_rewards
             q_target_mc = q_target_mc.to(torch.float32)
-            logging.info(f"before")
             with torch.autocast(device.type, enabled=enable_amp):
                 if online:
                     mu_mortal, _ = mortal(obs)
@@ -257,7 +255,6 @@ def train():
                         )
                         / opt_step_every
                     )
-            logging.info(f"loss")
             scaler.scale(loss).backward()
 
             with torch.no_grad():
