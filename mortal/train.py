@@ -1,3 +1,5 @@
+
+
 def train():
     import prelude
 
@@ -12,7 +14,7 @@ def train():
     from glob import glob
     from torch import optim
     from torch.cuda import amp
-    from torch.nn import functional as F
+    from torch.nn import functional as F, DataParallel as DD
     from torch.distributions import Normal
     from torch.utils.data import DataLoader
     from torch.utils.tensorboard import SummaryWriter
@@ -20,10 +22,10 @@ def train():
     from tqdm.contrib.logging import logging_redirect_tqdm
     from common import normal_kl_div, submit_param, parameter_count, drain
     from player import TestPlayer
+    from train_play import train_play
     from dataloader import FileDatasetsIter, worker_init_fn
     from model import Brain, DQN
     from config import config
-
 
     from libriichi.dataset import GameplayLoader
 
@@ -47,7 +49,8 @@ def train():
     current_oracle = Brain(True, **config["resnet"]).to(device)
     current_dqn = DQN().to(device)
     log_beta = (
-        torch.tensor(config["vlog"]["beta_init"], dtype=torch.float32, device=device)
+        torch.tensor(config["vlog"]["beta_init"],
+                     dtype=torch.float32, device=device)
         .log()
         .requires_grad_(True)
     )
@@ -58,21 +61,13 @@ def train():
 
     mortal.freeze_bn(config["freeze_bn"]["mortal"])
     current_oracle.freeze_bn(config["freeze_bn"]["oracle"])
-
-    optimizer = optim.Adam(
-        [
-            {"params": mortal.parameters()},
-            {"params": current_oracle.parameters()},
-            {"params": current_dqn.parameters()},
-            {"params": [log_beta]},
-        ]
-    )
     scaler = amp.GradScaler(enabled=enable_amp)
     test_player = TestPlayer()
 
     steps = 0
     state_file = config["control"]["state_file"]
-    if path.exists(state_file):
+    can_load_state = path.exists(state_file)
+    if can_load_state:
         state = torch.load(state_file, map_location=device)
         timestamp = datetime.fromtimestamp(state["timestamp"]).strftime(
             "%Y-%m-%d %H:%M:%S"
@@ -82,23 +77,33 @@ def train():
         current_oracle.load_state_dict(state["current_oracle"])
         current_dqn.load_state_dict(state["current_dqn"])
         log_beta.detach().copy_(state["log_beta"])
-        optimizer.load_state_dict(state["optimizer"])
         scaler.load_state_dict(state["scaler"])
         steps = state["steps"]
 
+    mortal = DD(mortal)
+    current_oracle = DD(current_oracle)
+    current_dqn = DD(current_dqn)
+
+    optimizer = optim.Adam(
+        [
+            {"params": mortal.parameters()},
+            {"params": current_oracle.parameters()},
+            {"params": current_dqn.parameters()},
+            {"params": [log_beta]},
+        ]
+    )
+    if can_load_state:
+        optimizer.load_state_dict(state["optimizer"])
     optimizer.param_groups[0]["lr"] = config["optim"]["mortal_lr"]
     optimizer.param_groups[1]["lr"] = config["optim"]["oracle_lr"]
     optimizer.param_groups[2]["lr"] = config["optim"]["dqn_lr"]
     optimizer.param_groups[3]["lr"] = config["optim"]["beta_lr"]
 
     if device.type == "cuda":
-        logging.info(f"device: {device} ({torch.cuda.get_device_name(device)})")
+        logging.info(
+            f"device: {device} ({torch.cuda.get_device_name(device)})")
     else:
         logging.info(f"device: {device}")
-
-    if online:
-        submit_param(current_oracle, mortal, current_dqn)
-        logging.info("param has been submitted")
 
     writer = SummaryWriter(config["control"]["tensorboard_dir"])
 
@@ -106,25 +111,26 @@ def train():
     stats_cql_loss = 0
     stats_kld_loss = 0
     stats_beta_loss = 0
-    all_q = torch.zeros((save_every, batch_size), device=device, dtype=torch.float32)
+    all_q = torch.zeros((save_every, batch_size),
+                        device=device, dtype=torch.float32)
     all_q_target = torch.zeros(
         (save_every, batch_size), device=device, dtype=torch.float32
     )
     idx = 0
 
-    def check_files(files):
-        has_errors = False
-        with tqdm(desc="Error cnt", position=1) as error_cnt:
-            loader = GameplayLoader(oracle=True)
-            for file in tqdm(files, desc="Checking files..."):
-                try:
-                    loader.load_gz_log_files([file])
-                except:
-                    logging.error("Error loading {}".format(file))
-                    error_cnt.update()
-                    os.remove(file)
-                    has_errors = True
-        return not has_errors
+    # def check_files(files):
+    #     has_errors = False
+    #     with tqdm(desc="Error cnt", position=1) as error_cnt:
+    #         loader = GameplayLoader(oracle=True)
+    #         for file in tqdm(files, desc="Checking files..."):
+    #             try:
+    #                 loader.load_gz_log_files([file])
+    #             except:
+    #                 logging.error("Error loading {}".format(file))
+    #                 error_cnt.update()
+    #                 os.remove(file)
+    #                 has_errors = True
+    #     return not has_errors
 
     def train_epoch():
         nonlocal steps
@@ -137,22 +143,20 @@ def train():
         player_name = None
         if online:
             player_name = "trainee"
-            dirname = drain()
-            file_list = list(map(lambda p: path.join(dirname, p), os.listdir(dirname)))
+            file_list = train_play(torch.load(state_file, map_location=device))
         else:
             file_index = config["dataset"]["file_index"]
-            if path.exists(file_index):
-                index = torch.load(file_index)
-                file_list = index["file_list"]
-            else:
+            if not path.exists(file_index):
                 logging.info("building file index...")
                 file_list = []
                 for pat in config["dataset"]["globs"]:
                     file_list.extend(glob(pat, recursive=True))
                 file_list.sort(reverse=True)
-                if not check_files(file_list):
-                    return
+                # if not check_files(file_list):
+                #     return
                 torch.save({"file_list": file_list}, file_index)
+            index = torch.load(file_index)
+            file_list = index["file_list"]
         logging.info(f"file list size: {len(file_list):,}")
 
         before_next_test_play = (test_every - steps % test_every) % test_every
@@ -160,7 +164,8 @@ def train():
         if not online:
             approx_percent = steps * batch_size / (len(file_list) * 650) * 100
             est = f" est. {approx_percent:6.3f}%"
-        logging.info(f"total steps: {steps:,} (~{before_next_test_play:,}){est}")
+        logging.info(
+            f"total steps: {steps:,} (~{before_next_test_play:,}){est}")
 
         file_data = FileDatasetsIter(
             file_list=file_list,
@@ -193,13 +198,16 @@ def train():
             steps_to_done,
             kyoku_rewards,
         ) in data_loader:
+            logging.info(f"start")
             obs = obs.to(dtype=torch.float32, device=device)
             if not online:
-                invisible_obs = invisible_obs.to(dtype=torch.float32, device=device)
+                invisible_obs = invisible_obs.to(
+                    dtype=torch.float32, device=device)
             actions = actions.to(dtype=torch.int64, device=device)
             masks = masks.to(dtype=torch.bool, device=device)
             steps_to_done = steps_to_done.to(dtype=torch.int64, device=device)
-            kyoku_rewards = kyoku_rewards.to(dtype=torch.float64, device=device)
+            kyoku_rewards = kyoku_rewards.to(
+                dtype=torch.float64, device=device)
             if not masks[range(batch_size), actions].all():
                 with logging_redirect_tqdm():
                     logging.warn(f"Data error detected for step:{steps}")
@@ -207,7 +215,7 @@ def train():
 
             q_target_mc = gamma**steps_to_done * kyoku_rewards
             q_target_mc = q_target_mc.to(torch.float32)
-
+            logging.info(f"before")
             with torch.autocast(device.type, enabled=enable_amp):
                 if online:
                     mu_mortal, _ = mortal(obs)
@@ -249,6 +257,7 @@ def train():
                         )
                         / opt_step_every
                     )
+            logging.info(f"loss")
             scaler.scale(loss).backward()
 
             with torch.no_grad():
@@ -275,7 +284,8 @@ def train():
                 all_q_1d = all_q.cpu().numpy().flatten()[::128]
                 all_q_target_1d = all_q_target.cpu().numpy().flatten()[::128]
 
-                writer.add_scalar("loss/dqn_loss", stats_dqn_loss / save_every, steps)
+                writer.add_scalar(
+                    "loss/dqn_loss", stats_dqn_loss / save_every, steps)
                 if not online:
                     writer.add_scalar(
                         "loss/cql_loss", stats_cql_loss / save_every, steps
@@ -286,7 +296,8 @@ def train():
                     writer.add_scalar(
                         "loss/beta_loss", stats_beta_loss / save_every, steps
                     )
-                    writer.add_scalar("param/beta", log_beta.detach().exp(), steps)
+                    writer.add_scalar(
+                        "param/beta", log_beta.detach().exp(), steps)
                 writer.add_histogram("q_predicted", all_q_1d, steps)
                 writer.add_histogram("q_target", all_q_target_1d, steps)
                 writer.flush()
@@ -297,19 +308,21 @@ def train():
                 stats_beta_loss = 0
                 idx = 0
 
-                before_next_test_play = (test_every - steps % test_every) % test_every
+                before_next_test_play = (
+                    test_every - steps % test_every) % test_every
                 est = ""
                 if not online:
-                    approx_percent = steps * batch_size / (len(file_list) * 650) * 100
+                    approx_percent = steps * batch_size / \
+                        (len(file_list) * 650) * 100
                     est = f" est. {approx_percent:6.3f}%"
                 logging.info(
                     f"total steps: {steps:,} (~{before_next_test_play:,}){est}"
                 )
 
                 state = {
-                    "mortal": mortal.state_dict(),
-                    "current_oracle": current_oracle.state_dict(),
-                    "current_dqn": current_dqn.state_dict(),
+                    "mortal": mortal.module.state_dict(),
+                    "current_oracle": current_oracle.module.state_dict(),
+                    "current_dqn": current_dqn.module.state_dict(),
                     "log_beta": log_beta,
                     "optimizer": optimizer.state_dict(),
                     "scaler": scaler.state_dict(),
@@ -318,22 +331,18 @@ def train():
                     "config": config,
                 }
                 torch.save(state, state_file)
-
-                if online:
-                    submit_param(current_oracle, mortal, current_dqn)
-                    logging.info("param has been submitted")
-
                 if steps % test_every == 0:
                     stat = test_player.test_play(
-                        test_games // 4, mortal, current_dqn, device
+                        test_games // 4, mortal.module, current_dqn.module, device
                     )
-                    mortal.train()
-                    current_dqn.train()
+                    mortal.module.train()
+                    current_dqn.module.train()
 
                     avg_pt = stat.avg_pt([90, 45, 0, -135])
                     logging.info(f"avg rank: {stat.avg_rank}")
                     logging.info(f"avg pt: {avg_pt}")
-                    writer.add_scalar("test_play/avg_ranking", stat.avg_rank, steps)
+                    writer.add_scalar("test_play/avg_ranking",
+                                      stat.avg_rank, steps)
                     writer.add_scalar("test_play/avg_pt", avg_pt, steps)
                     writer.add_scalars(
                         "test_play/ranking",
@@ -401,17 +410,18 @@ def train():
                         },
                         steps,
                     )
-                    writer.add_scalar("test_play/fuuro_num", stat.avg_fuuro_num, steps)
+                    writer.add_scalar("test_play/fuuro_num",
+                                      stat.avg_fuuro_num, steps)
                     writer.add_scalar(
                         "test_play/fuuro_point", stat.avg_fuuro_point, steps
                     )
                     writer.flush()
-                    if online:
-                        # BUG: This is an bug with unkown reason. When training
-                        # in online mode, the process will get stuck here. This
-                        # is the reason why `main` spawns a sub process to train
-                        # in online mode instead of going for training directly.
-                        sys.exit(0)
+                    # if online:
+                    #     # BUG: This is an bug with unkown reason. When training
+                    #     # in online mode, the process will get stuck here. This
+                    #     # is the reason why `main` spawns a sub process to train
+                    #     # in online mode instead of going for training directly.
+                    #     sys.exit(0)
 
                 pb = tqdm(
                     total=save_every,
@@ -421,10 +431,6 @@ def train():
                     ascii=True,
                 )
         pb.close()
-
-        if online:
-            submit_param(current_oracle, mortal, current_dqn)
-            logging.info("param has been submitted")
 
     while True:
         train_epoch()
@@ -436,34 +442,34 @@ def train():
 
 
 def main():
-    import os
-    import sys
-    import time
-    from subprocess import Popen
-    from config import config
+    # import os
+    # import sys
+    # import time
+    # from subprocess import Popen
+    # from config import config
 
+    train()
+    return
     # do not set this env manually
-    is_sub_proc_key = "MORTAL_IS_SUB_PROC"
-    online = config["control"]["online"]
-    if not online or os.environ.get(is_sub_proc_key, "0") == "1":
-        train()
-        return
+    # is_sub_proc_key = "MORTAL_IS_SUB_PROC"
+    # online = config["control"]["online"]
+    # if not online or os.environ.get(is_sub_proc_key, "0") == "1":
 
-    cmd = (sys.executable, __file__)
-    env = {
-        is_sub_proc_key: "1",
-        **os.environ.copy(),
-    }
-    while True:
-        child = Popen(
-            cmd,
-            stdin=sys.stdin,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            env=env,
-        )
-        child.wait()
-        time.sleep(3)
+    # cmd = (sys.executable, __file__)
+    # env = {
+    #     is_sub_proc_key: "1",
+    #     **os.environ.copy(),
+    # }
+    # while True:
+    #     child = Popen(
+    #         cmd,
+    #         stdin=sys.stdin,
+    #         stdout=sys.stdout,
+    #         stderr=sys.stderr,
+    #         env=env,
+    #     )
+    #     child.wait()
+    #     time.sleep(3)
 
 
 if __name__ == "__main__":
