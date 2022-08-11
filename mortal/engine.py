@@ -35,10 +35,7 @@ class MortalEngine:
         self.boltzmann_temp = boltzmann_temp
 
     def react_batch(self, obs, masks, invisible_obs):
-        with (
-            torch.autocast(self.device.type, enabled=self.enable_amp),
-            torch.no_grad(),
-        ):
+        with torch.autocast(self.device.type, enabled=self.enable_amp), torch.no_grad():
             return self._react_batch(obs, masks, invisible_obs)
 
     def _react_batch(self, obs, masks, invisible_obs):
