@@ -24,3 +24,6 @@ def main():
     while True:
         rotate()
         sleep(60*60*24)
+
+if __name__ == "__main__":
+    main()
