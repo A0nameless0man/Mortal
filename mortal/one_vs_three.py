@@ -28,7 +28,7 @@ def main():
         version = cham_cfg['control'].get('version', 1)
         conv_channels = cham_cfg['resnet']['conv_channels']
         num_blocks = cham_cfg['resnet']['num_blocks']
-        mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks, use_bn=(not cham_cfg.get('use_bn_layer', dict()).get('mortal', True))).eval()
+        mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks, use_bn=( cham_cfg.get('use_bn_layer', dict()).get('mortal', True))).eval()
         dqn = DQN(version=version).eval()
         mortal.load_state_dict(state['mortal'])
         dqn.load_state_dict(state['current_dqn'])
@@ -49,7 +49,7 @@ def main():
     version = chal_cfg['control'].get('version', 1)
     conv_channels = chal_cfg['resnet']['conv_channels']
     num_blocks = chal_cfg['resnet']['num_blocks']
-    mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks, use_bn=(not chal_cfg.get('use_bn_layer', dict()).get('mortal', True))).eval()
+    mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks, use_bn=( chal_cfg.get('use_bn_layer', dict()).get('mortal', True))).eval()
     dqn = DQN(version=version).eval()
     mortal.load_state_dict(state['mortal'])
     dqn.load_state_dict(state['current_dqn'])

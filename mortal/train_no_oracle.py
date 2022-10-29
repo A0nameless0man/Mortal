@@ -52,7 +52,7 @@ def train():
     num_workers = config['dataset']['num_workers']
     max_grad_norm = config['optim']['max_grad_norm']
 
-    mortal = Brain(version=version, **config['resnet'], use_bn=(not config.get('use_bn_layer', dict()).get('mortal', True))).to(device)
+    mortal = Brain(version=version, **config['resnet'], use_bn=( config.get('use_bn_layer', dict()).get('mortal', True))).to(device)
     current_dqn = DQN(version=version).to(device)
 
     logging.info(f'mortal params: {parameter_count(mortal):,}')

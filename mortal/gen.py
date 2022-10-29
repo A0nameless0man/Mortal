@@ -21,12 +21,13 @@ def gen():
     from config import config
 
     device = torch.device(config["control"]["device"])
-    version = config['control']['version']
+    version = config["control"]["version"]
 
     torch.backends.cudnn.benchmark = config["control"]["enable_cudnn_benchmark"]
     enable_amp = config["control"]["enable_amp"]
-
-    mortal = Brain(version=version, **config['resnet'], use_bn=(not config.get('use_bn_layer', dict()).get('mortal', True))).to(device)
+    use_bn =  config.get("use_bn_layer", dict()).get("mortal", True)
+    logging.info(f'use_bn: {use_bn}')
+    mortal = Brain(version=version, **config["resnet"], use_bn=use_bn).to(device)
     current_dqn = DQN(version=version).to(device)
 
     logging.info(f"mortal params: {parameter_count(mortal):,}")
@@ -45,8 +46,8 @@ def gen():
     steps = 0
     state_file = config["control"]["state_file"]
 
-    optimizer.param_groups[0]['lr'] = config['optim']['mortal_lr']
-    optimizer.param_groups[1]['lr'] = config['optim']['dqn_lr']
+    optimizer.param_groups[0]["lr"] = config["optim"]["mortal_lr"]
+    optimizer.param_groups[1]["lr"] = config["optim"]["dqn_lr"]
     optimizer.zero_grad(set_to_none=True)
     state = {
         "mortal": mortal.state_dict(),
