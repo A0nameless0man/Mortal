@@ -38,7 +38,7 @@ def main():
     conv_channels = config['resnet']['conv_channels']
     oracle = None
     # oracle = Brain(version=version, is_oracle=True, num_blocks=num_blocks, conv_channels=conv_channels).to(device).eval()
-    mortal = Brain(version=version, num_blocks=num_blocks, conv_channels=conv_channels).to(device).eval()
+    mortal = Brain(version=version, num_blocks=num_blocks, conv_channels=conv_channels, use_bn=(not config.get('use_bn_layer', dict()).get('mortal', True))).to(device).eval()
     dqn = DQN(version=version).to(device)
     continues_fail_cnt = 0
     while True:

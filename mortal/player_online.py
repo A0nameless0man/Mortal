@@ -34,7 +34,7 @@ class TrainPlayer:
         version = model_cfg['control'].get('version', 1)
         conv_channels = model_cfg['resnet']['conv_channels']
         num_blocks = model_cfg['resnet']['num_blocks']
-        stable_mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks).eval()
+        stable_mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks, use_bn=(not model_cfg.get('use_bn_layer', dict()).get('mortal', True))).eval()
         stable_dqn = DQN(version=version).eval()
         stable_mortal.load_state_dict(rsp['mortal'])
         stable_dqn.load_state_dict(rsp['dqn'])

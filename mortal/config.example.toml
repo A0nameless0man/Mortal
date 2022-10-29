@@ -60,6 +60,10 @@ free_bits_weight = 1e-3
 mortal = true
 oracle = true
 
+[use_bn_layer]
+mortal = false
+oracle = false
+
 [optim]
 mortal_lr = 1e-4
 oracle_lr = 1e-4

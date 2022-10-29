@@ -18,7 +18,7 @@ class TestPlayer:
         version = cfg['control'].get('version', 1)
         conv_channels = cfg['resnet']['conv_channels']
         num_blocks = cfg['resnet']['num_blocks']
-        stable_mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks).eval()
+        stable_mortal = Brain(version=version, conv_channels=conv_channels, num_blocks=num_blocks, use_bn=(not cfg.get('use_bn_layer', dict()).get('mortal', True))).eval()
         stable_dqn = DQN(version=version).eval()
         stable_mortal.load_state_dict(state['mortal'])
         stable_dqn.load_state_dict(state['current_dqn'])

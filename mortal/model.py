@@ -102,11 +102,15 @@ class ResNet(nn.Module):
         return self.net(x)
 
 class Brain(nn.Module):
-    def __init__(self, *, conv_channels, num_blocks, is_oracle=False, version=1):
+    def __init__(self, *, conv_channels, num_blocks, is_oracle=False, version=1, use_bn = False):
         super().__init__()
         self.is_oracle = is_oracle
         self.version = version
-        norm_builder = lambda: nn.BatchNorm1d(conv_channels, momentum=0.01)
+        self.use_bn = use_bn
+        if use_bn:
+            norm_builder = lambda: nn.BatchNorm1d(conv_channels, momentum=0.01)
+        else:
+            norm_builder = nn.Identity
         bias = False
 
         match version:
@@ -158,7 +162,7 @@ class Brain(nn.Module):
 
     def train(self, mode=True):
         super().train(mode)
-        if self._freeze_bn:
+        if self._freeze_bn and self.use_bn:
             for module in self.modules():
                 if isinstance(module, nn.BatchNorm1d):
                     module.eval()
@@ -179,6 +183,7 @@ class Brain(nn.Module):
     def freeze_bn(self, value: bool):
         self._freeze_bn = value
         return self.train(self.training)
+        pass
 
 class DQN(nn.Module):
     def __init__(self, version=1):
