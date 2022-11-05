@@ -72,7 +72,7 @@ class TrainPlayer:
             boltzmann_epsilon = self.boltzmann_epsilon,
             boltzmann_temp = self.boltzmann_temp,
             device = device,
-            enable_amp = True,
+            enable_amp = False,
             name = 'trainee',
         )
 

@@ -34,7 +34,7 @@ def gen():
 
     mortal.freeze_bn(config["freeze_bn"]["mortal"])
 
-    optimizer = optim.Adam(
+    optimizer = optim.RMSprop(
         [
             {"params": mortal.parameters()},
             {"params": current_dqn.parameters()},

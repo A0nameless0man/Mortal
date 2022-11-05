@@ -60,10 +60,10 @@ def train():
 
     mortal.freeze_bn(config['freeze_bn']['mortal'])
 
-    optimizer = optim.AdamW([
+    optimizer = optim.RMSprop([
         {'params': mortal.parameters()},
         {'params': current_dqn.parameters()},
-    ])
+    ],eps=1e-3)
     scaler = amp.GradScaler(enabled=enable_amp)
     
 
