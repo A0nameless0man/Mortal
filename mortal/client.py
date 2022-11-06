@@ -1,4 +1,5 @@
 
+import os
 import prelude
 
 import logging
@@ -29,6 +30,7 @@ def get_remote():
     return (ip,port)
 
 def main():
+    profile = os.environ.get('TRAIN_PLAY_PROFILE', 'default')
     remote = get_remote()
     config = get_config(remote)
     logging.info('config has been loaded')
@@ -46,7 +48,7 @@ def main():
         while True:
             with socket.socket() as conn:
                 conn.connect(remote)
-                send_msg(conn, {'type': 'get_param'})
+                send_msg(conn, {'type': 'get_param','name': profile})
                 rsp = recv_msg(conn, map_location=device)
                 if rsp['status'] == 'ok':
                     break

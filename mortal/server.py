@@ -65,7 +65,8 @@ class Handler(BaseRequestHandler):
 
         match msg['type']:
             case 'get_param':
-                self.get_param()
+                name = msg.get('name','default')
+                self.get_param(name)
 
             case 'get_test_param':
                 self.get_test_param(msg['name'] if msg['name'] is not None else 'default')
@@ -117,9 +118,9 @@ class Handler(BaseRequestHandler):
                     logging.info(f'sample_reuse_threshold = {sample_reuse_threshold}')
                     logging.info(f'capacity = {capacity}')
 
-    def get_param(self):
+    def get_param(self,name):
         with dir_lock:
-            overflow = buffer_size >= capacity
+            overflow = buffer_size >= capacity * config['train_play'][name].get('priority',1)
             with param_lock:
                 has_param = mortal_param is not None and dqn_param is not None
         if not has_param or overflow:
