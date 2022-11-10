@@ -213,7 +213,7 @@ def train():
                 writer.add_histogram('q_predicted', all_q_1d, steps)
                 writer.add_histogram('q_target', all_q_target_1d, steps)
                 now_time = time.time()
-                writer.add_scalar('time/batch_time', (now_time - batch_start_time) / batch_size, steps)
+                writer.add_scalar('time/batch_time', (now_time - batch_start_time) / save_every, steps)
                 writer.flush()
 
                 for k in stats:

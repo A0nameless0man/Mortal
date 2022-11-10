@@ -143,7 +143,7 @@ class Handler(BaseRequestHandler):
             try:
                 state = torch.load(cfg['state_file'], map_location=torch.device('cpu'))
                 break
-            except RuntimeError as e:
+            except Exception as e:
                 logging.exception('failed to load state file：%s',str(e))
                 pass
         res = {
