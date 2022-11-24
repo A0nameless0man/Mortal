@@ -106,7 +106,7 @@ class Brain(nn.Module):
         super().__init__()
         self.is_oracle = is_oracle
         self.version = version
-        norm_builder = lambda: nn.BatchNorm1d(conv_channels, momentum=0.01, eps=1e-2)
+        norm_builder = lambda: nn.BatchNorm1d(conv_channels, momentum=0.1, eps=1e-2)
         bias = False
 
         match version:
