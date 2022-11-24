@@ -63,7 +63,7 @@ def train():
     optimizer = optim.AdamW([
         {'params': mortal.parameters()},
         {'params': current_dqn.parameters()},
-    ])
+    ],weight_decay=0.1,eps=1e-2)
     scaler = amp.GradScaler(enabled=enable_amp)
     
 

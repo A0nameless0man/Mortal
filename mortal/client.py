@@ -44,7 +44,6 @@ def main():
     dqn = DQN(version=version).to(device)
     continues_fail_cnt = 0
     while True:
-        train_player = TrainPlayer(remote,version)
         while True:
             with socket.socket() as conn:
                 conn.connect(remote)
@@ -53,6 +52,7 @@ def main():
                 if rsp['status'] == 'ok':
                     break
                 time.sleep(3)
+        train_player = TrainPlayer(remote,version)
         mortal.load_state_dict(rsp['mortal'])
         dqn.load_state_dict(rsp['dqn'])
         logging.info('param has been updated')
