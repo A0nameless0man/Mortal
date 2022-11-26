@@ -6,6 +6,7 @@ import os
 from time import sleep
 from config import config
 
+interval_hour = 6
 
 def cp(source, target) -> bool:
     if os.path.exists(source):
@@ -35,7 +36,7 @@ def rotate():
             + "/"
             + os.path.splitext(os.path.basename(curent))[0]
             + "-"
-            + (datetime.now() + timedelta(hours=(-(i)))).strftime("%Y%m%d%H")
+            + (datetime.now() + timedelta(hours=(-(i*interval_hour)))).strftime("%Y%m%d%H")
             + ".pth"
         )
         if not cp(old_archive, yesterday):
@@ -59,11 +60,10 @@ def sleep_to_dawn():
 def sleep_to_hour():
     now = datetime.today()
     t=now.time()
-    h=t.hour
-    dawn_time = time(hour=(h+1)%24, minute=0)
+    h=(t.hour//interval_hour)*interval_hour
+    dawn_time = time(hour=(h+interval_hour)%24, minute=0)
     next_dawn_day = date.today()
-    if now.time() > dawn_time:
-        next_dawn_day += timedelta(days=1)
+    next_dawn_day += timedelta(days=(h+interval_hour)//24)
     next_dawn = datetime.combine(next_dawn_day, dawn_time)
     delt = next_dawn - now
     delt = delt.total_seconds()

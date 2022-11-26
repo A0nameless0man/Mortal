@@ -139,20 +139,30 @@ class Handler(BaseRequestHandler):
 
     def get_test_param(self,name):
         cfg = config['train_play'][name]
-        while True:
-            try:
-                state = torch.load(cfg['state_file'], map_location=torch.device('cpu'))
-                break
-            except Exception as e:
-                logging.exception('failed to load state file：%s',str(e))
-                pass
-        res = {
-            'status': 'ok',
-            'mortal': state['mortal'],
-            'dqn': state['current_dqn'],
-            'model_cfg': state['config'],
-            'cfg': cfg,
-        }
+        if cfg['state_file']==config['control']['state_file']:
+            with param_lock:
+                res = {
+                    'status': 'ok',
+                    'mortal': mortal_param,
+                    'dqn': dqn_param,
+                    'model_cfg': config,
+                    'cfg': cfg,
+                }
+        else:
+            while True:
+                try:
+                    state = torch.load(cfg['state_file'], map_location=torch.device('cpu'))
+                    break
+                except Exception as e:
+                    logging.exception('failed to load state file：%s',str(e))
+                    pass
+            res = {
+                'status': 'ok',
+                'mortal': state['mortal'],
+                'dqn': state['current_dqn'],
+                'model_cfg': state['config'],
+                'cfg': cfg,
+            }
         buf = BytesIO()
         torch.save(res, buf)
         self.send_msg(buf.getvalue(), packed=True)
