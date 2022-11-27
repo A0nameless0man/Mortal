@@ -8,6 +8,8 @@ from config import config
 
 interval_hour = 6
 
+assert 24 % interval_hour == 0
+
 def cp(source, target) -> bool:
     if os.path.exists(source):
         with open(source, "rb") as source_file, open(target, "wb") as tar_file:
