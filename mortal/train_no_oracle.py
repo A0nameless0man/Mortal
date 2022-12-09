@@ -405,7 +405,7 @@ def train():
                             # in online mode, the process will get stuck here. This
                             # is the reason why `main` spawns a sub process to train
                             # in online mode instead of going for training directly.
-                            # sys.exit(0)
+                            sys.exit(0)
                 batch_start_time = now_time
                 pb = tqdm(
                     total=save_every,
