@@ -63,6 +63,8 @@ class TrainPlayer:
 
     def train_play(self, oracle, mortal, dqn, device):
         torch.backends.cudnn.benchmark = False
+        mortal = mortal.eval()
+        dqn = dqn.eval()
         engine_chal = MortalEngine(
             mortal,
             dqn,
