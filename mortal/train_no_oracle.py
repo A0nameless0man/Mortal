@@ -60,12 +60,11 @@ def train():
 
     mortal.freeze_bn(config["freeze_bn"]["mortal"])
 
-    optimizer = optim.AdamW(
+    optimizer = optim.Adam(
         [
             {"params": mortal.parameters()},
             {"params": current_dqn.parameters()},
         ],
-        weight_decay=1e-2,
         eps=1e-2,
     )
     scaler = amp.GradScaler(enabled=enable_amp)
@@ -156,9 +155,9 @@ def train():
                 dataset=file_data,
                 batch_size=batch_size,
                 drop_last=True,
-                # num_workers = num_workers,
-                # pin_memory = True,
-                # worker_init_fn = worker_init_fn,
+                num_workers = num_workers,
+                pin_memory = True,
+                worker_init_fn = worker_init_fn,
             )
         )
 
@@ -398,7 +397,15 @@ def train():
                             },
                             steps,
                         )
-                    writer.flush()
+                        writer.flush()
+                        if online:
+                            submit_param(None, mortal, current_dqn)
+                            logging.info("param has been submitted")
+                            # BUG: This is an bug with unkown reason. When training
+                            # in online mode, the process will get stuck here. This
+                            # is the reason why `main` spawns a sub process to train
+                            # in online mode instead of going for training directly.
+                            # sys.exit(0)
                 batch_start_time = now_time
                 pb = tqdm(
                     total=save_every,
@@ -409,14 +416,6 @@ def train():
                 )
         pb.close()
 
-        if online:
-            submit_param(None, mortal, current_dqn)
-            logging.info("param has been submitted")
-            # BUG: This is an bug with unkown reason. When training
-            # in online mode, the process will get stuck here. This
-            # is the reason why `main` spawns a sub process to train
-            # in online mode instead of going for training directly.
-            # sys.exit(0)
 
     while True:
         train_epoch()
