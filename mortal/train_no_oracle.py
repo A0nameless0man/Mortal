@@ -92,10 +92,6 @@ def train():
     else:
         logging.info(f"device: {device}")
 
-    if online:
-        submit_param(None, mortal, current_dqn)
-        logging.info("param has been submitted")
-
     writer = SummaryWriter(config["control"]["tensorboard_dir"])
     stats = {
         "dqn_loss": 0,
@@ -112,7 +108,9 @@ def train():
         nonlocal steps
         nonlocal idx
         nonlocal batch_start_time
-
+        if online:
+            submit_param(None, mortal, current_dqn)
+            logging.info("param has been submitted")
         player_names = []
         if online:
             player_names = ["trainee"]

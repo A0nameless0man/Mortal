@@ -21,29 +21,29 @@ def cp(source, target) -> bool:
 
 def rotate():
     curent = config["control"]["state_file"]
-    archive = (
-        os.path.dirname(curent)
-        + "/"
-        + os.path.splitext(os.path.basename(curent))[0]
+    archive_dir = config["control"]["archive_dir"]
+    archive = os.path.join(
+        archive_dir,
+        os.path.splitext(os.path.basename(curent))[0]
         + "-"
         + datetime.now().strftime("%Y%m%d%H")
         + ".pth"
     )
     cp(curent, archive)
 
-    for i in range(6):
-        yesterday = os.path.dirname(curent) + "/T-{}.pth".format(i)
-        old_archive = (
-            os.path.dirname(curent)
-            + "/"
-            + os.path.splitext(os.path.basename(curent))[0]
-            + "-"
-            + (datetime.now() + timedelta(hours=(-(i*interval_hour)))).strftime("%Y%m%d%H")
-            + ".pth"
-        )
-        if not cp(old_archive, yesterday):
-            old_archive = os.path.dirname(curent) + "/T-{}.pth".format(i - 1)
-            cp(old_archive, yesterday)
+    # for i in range(6):
+    #     yesterday = os.path.dirname(curent) + "/T-{}.pth".format(i)
+    #     old_archive = (
+    #         os.path.dirname(curent)
+    #         + "/"
+    #         + os.path.splitext(os.path.basename(curent))[0]
+    #         + "-"
+    #         + (datetime.now() + timedelta(hours=(-(i*interval_hour)))).strftime("%Y%m%d%H")
+    #         + ".pth"
+    #     )
+    #     if not cp(old_archive, yesterday):
+    #         old_archive = os.path.dirname(curent) + "/T-{}.pth".format(i - 1)
+    #         cp(old_archive, yesterday)
 
 
 def sleep_to_dawn():
