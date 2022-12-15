@@ -51,8 +51,10 @@ def train():
     file_batch_size = config["dataset"]["file_batch_size"]
     num_workers = config["dataset"]["num_workers"]
     max_grad_norm = config["optim"]["max_grad_norm"]
+    norm_config = config['norm_layer']
 
-    mortal = Brain(version=version, **config["resnet"]).to(device)
+
+    mortal = Brain(version=version, **config["resnet"], norm_config=norm_config).to(device)
     current_dqn = DQN(version=version).to(device)
 
     logging.info(f"mortal params: {parameter_count(mortal):,}")
@@ -60,11 +62,12 @@ def train():
 
     mortal.freeze_bn(config["freeze_bn"]["mortal"])
 
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         [
             {"params": mortal.parameters()},
             {"params": current_dqn.parameters()},
         ],
+        weight_decay=1e-3,
         eps=1e-2,
     )
     scaler = amp.GradScaler(enabled=enable_amp)

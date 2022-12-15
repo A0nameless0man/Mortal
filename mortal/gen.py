@@ -25,8 +25,9 @@ def gen():
 
     torch.backends.cudnn.benchmark = config["control"]["enable_cudnn_benchmark"]
     enable_amp = config["control"]["enable_amp"]
+    norm_config = config['norm_layer']
 
-    mortal = Brain(version=version, **config['resnet']).to(device)
+    mortal = Brain(version=version, **config['resnet'], norm_config=norm_config).to(device)
     current_dqn = DQN(version=version).to(device)
 
     logging.info(f"mortal params: {parameter_count(mortal):,}")

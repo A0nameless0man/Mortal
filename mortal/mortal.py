@@ -32,10 +32,12 @@ def main():
     version = cfg['control'].get('version', 1)
     num_blocks = cfg['resnet']['num_blocks']
     conv_channels = cfg['resnet']['conv_channels']
+    norm_config = cfg['norm_layer']
+
     time = datetime.fromtimestamp(state['timestamp'], tz=timezone.utc).strftime('%y%m%d%H')
     tag = f'mortal{version}-b{num_blocks}c{conv_channels}-t{time}'
 
-    mortal = Brain(version=version, num_blocks=num_blocks, conv_channels=conv_channels).eval()
+    mortal = Brain(version=version, num_blocks=num_blocks, conv_channels=conv_channels, norm_config=norm_config).eval()
     dqn = DQN(version=version).eval()
     mortal.load_state_dict(state['mortal'])
     dqn.load_state_dict(state['current_dqn'])

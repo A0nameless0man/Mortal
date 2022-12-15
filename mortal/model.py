@@ -102,11 +102,21 @@ class ResNet(nn.Module):
         return self.net(x)
 
 class Brain(nn.Module):
-    def __init__(self, *, conv_channels, num_blocks, is_oracle=False, version=1, bn_momentum=0.01):
+    def __init__(self, *, conv_channels, num_blocks, is_oracle=False, version=1, norm_config=None):
         super().__init__()
         self.is_oracle = is_oracle
         self.version = version
-        norm_builder = lambda: nn.BatchNorm1d(conv_channels, momentum=bn_momentum, eps=1e-2)
+        norm_name = "BatchNorm1d"
+        norm_momentum = 0.1
+        if norm_config is not None:
+            norm_name = norm_config["name"]
+            norm_momentum = norm_config["momentum"]
+        match norm_name:
+            case "BatchNorm1d":
+                norm_builder = lambda: nn.BatchNorm1d(conv_channels, momentum=norm_momentum, eps=1e-2)
+            case "GroupNorm":
+                norm_group = norm_config["group"]
+                norm_builder = lambda: nn.GroupNorm(norm_group,conv_channels,eps=1e-2)
         bias = False
 
         match version:
