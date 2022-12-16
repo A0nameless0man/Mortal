@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="https://github.com/Equim-chan/Mortal/raw/main/docs/src/assets/logo.png" width="550" />
+  <img src="https://github.com/A0nameless0man/Mortal/raw/main/docs/src/assets/logo.png" width="550" />
 </p>
 
 # Mortal
 
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/Equim-chan/Mortal/build-libriichi?label=libriichi)](https://github.com/Equim-chan/Mortal/actions)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/Equim-chan/Mortal/deploy-docs?label=docs)](https://mortal.ekyu.moe)
-[![dependency status](https://deps.rs/repo/github/Equim-chan/Mortal/status.svg)](https://deps.rs/repo/github/Equim-chan/Mortal)
-![GitHub top language](https://img.shields.io/github/languages/top/Equim-chan/Mortal)
-![Lines of code](https://img.shields.io/tokei/lines/github/Equim-chan/Mortal)
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/Equim-chan/Mortal)
-[![license](https://img.shields.io/github/license/Equim-chan/Mortal)](https://github.com/Equim-chan/Mortal/blob/main/LICENSE)
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/A0nameless0man/Mortal/build-libriichi?label=libriichi)](https://github.com/A0nameless0man/Mortal/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/A0nameless0man/Mortal/deploy-docs?label=docs)](https://mortal.ekyu.moe)
+[![dependency status](https://deps.rs/repo/github/A0nameless0man/Mortal/status.svg)](https://deps.rs/repo/github/A0nameless0man/Mortal)
+![GitHub top language](https://img.shields.io/github/languages/top/A0nameless0man/Mortal)
+![Lines of code](https://img.shields.io/tokei/lines/github/A0nameless0man/Mortal)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/A0nameless0man/Mortal)
+[![license](https://img.shields.io/github/license/A0nameless0man/Mortal)](https://github.com/A0nameless0man/Mortal/blob/main/LICENSE)
 
 [![Donate](https://img.shields.io/badge/Donate-%E2%9D%A4%EF%B8%8F-blue?style=social)](https://mortal.ekyu.moe/donate.html)
 
@@ -29,7 +29,7 @@ Read [this post](https://gist.github.com/Equim-chan/cf3f01735d5d98f1e7be02e94b28
 
 ## License
 ### Code
-[![AGPL-3.0-or-later](https://github.com/Equim-chan/Mortal/raw/main/docs/src/assets/agpl.png)](https://github.com/Equim-chan/Mortal/blob/main/LICENSE)
+[![AGPL-3.0-or-later](https://github.com/A0nameless0man/Mortal/raw/main/docs/src/assets/agpl.png)](https://github.com/A0nameless0man/Mortal/blob/main/LICENSE)
 
 Copyright (C) 2021-2022 Equim
 
@@ -40,4 +40,4 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU Affero General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ### Logo and Other Assets
-[![CC BY-SA 4.0](https://github.com/Equim-chan/Mortal/raw/main/docs/src/assets/by-sa.png)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![CC BY-SA 4.0](https://github.com/A0nameless0man/Mortal/raw/main/docs/src/assets/by-sa.png)](https://creativecommons.org/licenses/by-sa/4.0/)
