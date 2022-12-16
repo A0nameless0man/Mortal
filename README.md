@@ -25,6 +25,9 @@ Goal is to train without human paipu / game record.
 Modified to improve 'online traing' stage.
 
 ## Okay cool now give me the weights!
+
+I respect Equim-chan's decision and won't release any weight file before his release.
+
 Read [this post](https://gist.github.com/Equim-chan/cf3f01735d5d98f1e7be02e94b288c56) for details regarding this topic.
 
 ## License
