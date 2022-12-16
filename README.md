@@ -18,6 +18,12 @@ Mortal ([凡夫](https://www.mdbg.net/chinese/dictionary?wdqb=%E5%87%A1%E5%A4%AB
 
 Read the [**Documentation**](https://mortal.ekyu.moe) for everything about this work.
 
+## About this fork
+
+Goal is to train without human paipu / game record.
+
+Modified to improve 'online traing' stage.
+
 ## Okay cool now give me the weights!
 Read [this post](https://gist.github.com/Equim-chan/cf3f01735d5d98f1e7be02e94b288c56) for details regarding this topic.
 

@@ -51,7 +51,7 @@ def train():
     file_batch_size = config["dataset"]["file_batch_size"]
     num_workers = config["dataset"]["num_workers"]
     max_grad_norm = config["optim"]["max_grad_norm"]
-    norm_config = config['norm_layer']
+    norm_config = config.get('norm_layer', None)
 
 
     mortal = Brain(version=version, **config["resnet"], norm_config=norm_config).to(device)

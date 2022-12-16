@@ -38,7 +38,7 @@ def main():
     version = config['control']['version']
     num_blocks = config['resnet']['num_blocks']
     conv_channels = config['resnet']['conv_channels']
-    norm_config = config['norm_layer']
+    norm_config = config.get('norm_layer', None)
     oracle = None
     # oracle = Brain(version=version, is_oracle=True, num_blocks=num_blocks, conv_channels=conv_channels).to(device).eval()
     mortal = Brain(version=version, num_blocks=num_blocks, conv_channels=conv_channels, norm_config=norm_config).to(device).eval()

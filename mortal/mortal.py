@@ -32,7 +32,7 @@ def main():
     version = cfg['control'].get('version', 1)
     num_blocks = cfg['resnet']['num_blocks']
     conv_channels = cfg['resnet']['conv_channels']
-    norm_config = cfg['norm_layer']
+    norm_config = cfg.get('norm_layer', None)
 
     time = datetime.fromtimestamp(state['timestamp'], tz=timezone.utc).strftime('%y%m%d%H')
     tag = f'mortal{version}-b{num_blocks}c{conv_channels}-t{time}'
