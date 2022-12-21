@@ -117,6 +117,8 @@ class Brain(nn.Module):
             case "GroupNorm":
                 norm_group = norm_config["group"]
                 norm_builder = lambda: nn.GroupNorm(norm_group,conv_channels,eps=1e-2)
+            case "Identity":
+                norm_builder = nn.Identity
         bias = False
 
         match version:
@@ -132,6 +134,7 @@ class Brain(nn.Module):
             case 2:
                 actv_builder = lambda: nn.Mish(inplace=True)
                 pre_actv = True
+
 
         in_channels = obs_shape(version)[0]
         if is_oracle:
