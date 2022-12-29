@@ -16,9 +16,9 @@ def train():
     from torch import optim
     from torch.cuda import amp
     from torch.nn import functional as F
-    from torch.nn.utils import clip_grad_norm_
+    from torch.nn.utils import clip_grad_norm_ # type: ignore
     from torch.utils.data import DataLoader
-    from torch.utils.tensorboard import SummaryWriter
+    from torch.utils.tensorboard import SummaryWriter # type: ignore
     from tqdm.auto import tqdm
     from common import submit_param, drain
     from torch_tools import parameter_count, filtered_stripped_lines
@@ -42,7 +42,7 @@ def train():
     assert test_every % save_every == 0
 
     device = torch.device(config["control"]["device"])
-    torch.backends.cudnn.benchmark = config["control"]["enable_cudnn_benchmark"]
+    torch.backends.cudnn.benchmark = config["control"]["enable_cudnn_benchmark"] # type: ignore
     enable_amp = config["control"]["enable_amp"]
     enable_online_cql = config["control"]["enable_online_cql"]
 
@@ -60,7 +60,6 @@ def train():
     logging.info(f"mortal params: {parameter_count(mortal):,}")
     logging.info(f"dqn params: {parameter_count(current_dqn):,}")
 
-    mortal.freeze_bn(config["freeze_bn"]["mortal"])
 
     optimizer = optim.AdamW(
         [
@@ -70,7 +69,7 @@ def train():
         weight_decay=1e-3,
         eps=1e-2,
     )
-    scaler = amp.GradScaler(enabled=enable_amp)
+    scaler = amp.GradScaler(enabled=enable_amp) # type: ignore
 
     steps = 0
     state_file = config["control"]["state_file"]
@@ -85,6 +84,23 @@ def train():
         optimizer.load_state_dict(state["optimizer"])
         scaler.load_state_dict(state["scaler"])
         steps = state["steps"]
+
+    freeze_bn_val:bool = config["freeze_bn"]["mortal"]
+    freeze_bn_cycles: list[int] = config["freeze_bn"]["cycle"]
+    freeze_bn_cycle = 0
+    assert len(freeze_bn_cycles) %2 == 0
+    for i in range(len(freeze_bn_cycles)):
+        freeze_bn_cycle += freeze_bn_cycles[i]
+        freeze_bn_cycles[i] = freeze_bn_cycle
+    for i in range(len(freeze_bn_cycles)):
+        if steps % freeze_bn_cycle > freeze_bn_cycles[i]:
+            freeze_bn_val ^= (i % 2 == 0)
+            break
+
+
+    mortal.freeze_bn(freeze_bn_val)
+
+
 
     optimizer.param_groups[0]["lr"] = config["optim"]["mortal_lr"]
     optimizer.param_groups[1]["lr"] = config["optim"]["dqn_lr"]
@@ -177,7 +193,7 @@ def train():
             q_target_mc = gamma**steps_to_done * kyoku_rewards
             q_target_mc = q_target_mc.to(torch.float32)
 
-            with torch.autocast(device.type, enabled=enable_amp):
+            with torch.autocast(device.type, enabled=enable_amp): # type: ignore
                 phi = mortal(obs)
                 q_out = current_dqn(phi, masks)
                 q = q_out[range(batch_size), actions]
@@ -196,10 +212,10 @@ def train():
                     )
                     / opt_step_every
                 )
-            scaler.scale(loss).backward()
+            scaler.scale(loss).backward() # type: ignore
 
             with torch.no_grad():
-                stats["dqn_loss"] += dqn_loss
+                stats["dqn_loss"] += dqn_loss # type: ignore
                 if enable_online_cql or not online:
                     stats["cql_loss"] += cql_loss
                 all_q[idx] = q
@@ -216,6 +232,12 @@ def train():
                 scaler.update()
                 optimizer.zero_grad(set_to_none=True)
             pb.update(1)
+            if freeze_bn_cycle != 0 and steps % freeze_bn_cycle in freeze_bn_cycles:
+                freeze_bn_val = not freeze_bn_val # type: ignore
+                mortal.freeze_bn(freeze_bn_val)
+                writer.add_scalar(
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
+                )
 
             if steps % save_every == 0:
                 pb.close()
