@@ -97,7 +97,7 @@ def train():
             freeze_bn_val ^= (i % 2 == 0)
             break
 
-
+    logging.info(f"freeze_bn_val: {freeze_bn_val}")
     mortal.freeze_bn(freeze_bn_val)
 
 
@@ -127,6 +127,7 @@ def train():
         nonlocal steps
         nonlocal idx
         nonlocal batch_start_time
+        nonlocal freeze_bn_val
         if online:
             submit_param(None, mortal, current_dqn)
             logging.info("param has been submitted")
@@ -238,9 +239,13 @@ def train():
                 writer.add_scalar(
                     "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
                 )
+                logging.info(f"freeze_bn_val: {freeze_bn_val}")
 
             if steps % save_every == 0:
                 pb.close()
+                writer.add_scalar(
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
+                )
 
                 # downsample to reduce tensorboard event size
                 all_q_1d = all_q.cpu().numpy().flatten()[::128]
