@@ -33,7 +33,7 @@ tmux new-session -d -s $session
     tmux new-window -t $session:$window -n 'train'
     panle=0
     tmux send-keys -t $session:$window.$panle "pyenv activate mortal" C-m
-    tmux send-keys -t $session:$window.$panle "$py ./train_no_oracle.py" C-m
+    tmux send-keys -t $session:$window.$panle "$py ./train.py" C-m
     tmux split-window -f -v -t $session:$window.$panle
     panle=$(($panle + 1))
     count=7
