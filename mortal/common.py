@@ -6,6 +6,7 @@ from functools import partial
 from tqdm.auto import tqdm as orig_tqdm
 from config import config
 from net_emit import send_msg,recv_msg
+import torch
 
 tqdm = partial(orig_tqdm, unit='batch', dynamic_ncols=True, ascii=True)
 

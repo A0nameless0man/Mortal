@@ -110,6 +110,7 @@ class Handler(BaseRequestHandler):
         cfg = config['train_play'][name]
         if cfg['state_file']==config['control']['state_file']:
             with S.param_lock:
+                has_param = S.mortal_param is not None and S.dqn_param is not None
                 res = {
                     'status': 'ok',
                     'mortal': S.mortal_param,
@@ -125,6 +126,7 @@ class Handler(BaseRequestHandler):
                 except Exception as e:
                     logging.exception('failed to load state file：%s',str(e))
                     pass
+            has_param = True
             res = {
                 'status': 'ok',
                 'mortal': state['mortal'],
@@ -132,6 +134,9 @@ class Handler(BaseRequestHandler):
                 'model_cfg': state['config'],
                 'cfg': cfg,
             }
+        if not has_param:
+            self.send_msg({'status': 'empty param'})
+            return
         buf = BytesIO()
         torch.save(res, buf)
         self.send_msg(buf.getvalue(), packed=True)
