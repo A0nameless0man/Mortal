@@ -1,25 +1,26 @@
 from io import BytesIO
 import torch
 import struct
+import socket
 
 
-def send_msg(conn, msg, packed=False):
+def send_msg(conn: socket.socket, msg, packed=False):
     if packed:
         tx = msg
     else:
         buf = BytesIO()
         torch.save(msg, buf)
-        tx = buf.getvalue()
+        tx = buf.getbuffer()
     conn.sendall(struct.pack('<Q', len(tx)))
     conn.sendall(tx)
 
-def recv_msg(conn, map_location=torch.device('cpu')):
+def recv_msg(conn: socket.socket, map_location=torch.device('cpu')):
     rx = recv_binary(conn, 8)
     (size,) = struct.unpack('<Q', rx)
     rx = recv_binary(conn, size)
     return torch.load(BytesIO(rx), map_location=map_location)
 
-def recv_binary(conn, size):
+def recv_binary(conn: socket.socket, size):
     assert size > 0
     ret = bytearray(size)
     buf = memoryview(ret)

@@ -58,7 +58,7 @@ class TrainPlayer:
         self.seed_count = cfg['games'] // 4
         self.boltzmann_epsilon = cfg['boltzmann_epsilon']
         self.boltzmann_temp = cfg['boltzmann_temp']
-        self.stochastic_latent = cfg['stochastic_latent']
+        self.stochastic_latent = cfg.get('stochastic_latent', True)
 
         self.repeats = cfg['repeats']
         self.repeat_counter = 0

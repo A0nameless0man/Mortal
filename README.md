@@ -4,15 +4,13 @@
 
 # Mortal
 
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/A0nameless0man/Mortal/build-libriichi?label=libriichi)](https://github.com/A0nameless0man/Mortal/actions)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/A0nameless0man/Mortal/deploy-docs?label=docs)](https://mortal.ekyu.moe)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/A0nameless0man/Mortal/libriichi.yml?branch=main)](https://github.com/A0nameless0man/Mortal/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/A0nameless0man/Mortal/docs.yml?branch=main)](https://mortal.ekyu.moe)
 [![dependency status](https://deps.rs/repo/github/A0nameless0man/Mortal/status.svg)](https://deps.rs/repo/github/A0nameless0man/Mortal)
 ![GitHub top language](https://img.shields.io/github/languages/top/A0nameless0man/Mortal)
 ![Lines of code](https://img.shields.io/tokei/lines/github/A0nameless0man/Mortal)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/A0nameless0man/Mortal)
 [![license](https://img.shields.io/github/license/A0nameless0man/Mortal)](https://github.com/A0nameless0man/Mortal/blob/main/LICENSE)
-
-[![Donate](https://img.shields.io/badge/Donate-%E2%9D%A4%EF%B8%8F-blue?style=social)](https://mortal.ekyu.moe/donate.html)
 
 Mortal ([凡夫](https://www.mdbg.net/chinese/dictionary?wdqb=%E5%87%A1%E5%A4%AB)) is a free and open source AI for Japanese mahjong, powered by deep reinforcement learning.
 

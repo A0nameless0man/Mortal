@@ -30,6 +30,7 @@ class TestPlayer:
             version = version,
             device = device,
             enable_amp = True,
+            enable_rule_based_agari_guard = True,
             name = 'baseline',
         )
         self.chal_version = config['control']['version']
