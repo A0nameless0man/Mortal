@@ -9,54 +9,73 @@ def gen():
     from glob import glob
     from torch import optim
     from torch.cuda import amp
-    from torch.nn import functional as F
-    from torch.distributions import Normal, kl_divergence
-    from torch.utils.data import DataLoader
-    from torch.utils.tensorboard import SummaryWriter
+    from torch import optim, nn
     from tqdm.auto import tqdm
+    from torch.cuda.amp import GradScaler
     from torch_tools import parameter_count
     from player import TestPlayer
     from dataloader import FileDatasetsIter, worker_init_fn
-    from model import Brain, DQN
+    from model import Brain, DQN, NextRankPredictor
+    from lr_scheduler import LinearWarmUpCosineAnnealingLR
     from config import config
 
     device = torch.device(config["control"]["device"])
     version = config['control']['version']
+    eps = config['optim']['eps']
+    betas = config['optim']['betas']
+    weight_decay = config['optim']['weight_decay']
 
-    torch.backends.cudnn.benchmark = config["control"]["enable_cudnn_benchmark"]
-    enable_amp = config["control"]["enable_amp"]
     norm_config = config.get('norm_layer', None)
-
+    logging.info(f"mortal version: {version:,}")
     mortal = Brain(version=version, **config['resnet'], norm_config=norm_config).to(device)
     current_dqn = DQN(version=version).to(device)
+    next_rank_pred = NextRankPredictor().to(device)
 
     logging.info(f"mortal params: {parameter_count(mortal):,}")
     logging.info(f"dqn params: {parameter_count(current_dqn):,}")
+    logging.info(f'next_rank_pred params: {parameter_count(next_rank_pred):,}')
 
     mortal.freeze_bn(config["freeze_bn"]["mortal"])
 
-    optimizer = optim.Adam(
-        [
-            {"params": mortal.parameters()},
-            {"params": current_dqn.parameters()},
-        ]
-    )
-    scaler = amp.GradScaler(enabled=enable_amp)
+    decay_params = []
+    no_decay_params = []
+    for model in (mortal, current_dqn):
+        params_dict = {}
+        to_decay = set()
+        for mod_name, mod in model.named_modules():
+            for name, param in mod.named_parameters(prefix=mod_name, recurse=False):
+                params_dict[name] = param
+                if isinstance(mod, (nn.Linear, nn.Conv1d)) and name.endswith('weight'):
+                    to_decay.add(name)
+        decay_params.extend(params_dict[name] for name in sorted(to_decay))
+        no_decay_params.extend(params_dict[name] for name in sorted(params_dict.keys() - to_decay))
+    param_groups = [
+        {'params': decay_params, 'weight_decay': weight_decay},
+        {'params': no_decay_params},
+    ]
+    optimizer = optim.AdamW(param_groups, lr=1, weight_decay=0, betas=betas, eps=eps)
+    scheduler = LinearWarmUpCosineAnnealingLR(optimizer, **config['optim']['scheduler'])
+    scaler = GradScaler()
 
     steps = 0
     state_file = config["control"]["state_file"]
-
-    optimizer.param_groups[0]['lr'] = config['optim']['mortal_lr']
-    optimizer.param_groups[1]['lr'] = config['optim']['dqn_lr']
     optimizer.zero_grad(set_to_none=True)
+    best_perf = {
+        'avg_rank': 4.,
+        'avg_pt': -135.,
+    }
+
     state = {
-        "mortal": mortal.state_dict(),
-        "current_dqn": current_dqn.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "scaler": scaler.state_dict(),
-        "steps": steps,
-        "timestamp": datetime.now().timestamp(),
-        "config": config,
+        'mortal': mortal.state_dict(),
+        'current_dqn': current_dqn.state_dict(),
+        'next_rank_pred': next_rank_pred.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
+        'scaler': scaler.state_dict(),
+        'steps': steps,
+        'timestamp': datetime.now().timestamp(),
+        'best_perf': best_perf,
+        'config': config,
     }
     torch.save(state, state_file)
 

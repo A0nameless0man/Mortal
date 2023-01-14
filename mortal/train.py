@@ -72,7 +72,6 @@ def train():
     logging.info(f'obs shape: {obs_shape(version)}')
 
     mortal.freeze_bn(config['freeze_bn']['mortal'])
-    mortal.set_bn_attrs(**config['bn_attrs'])
 
     decay_params = []
     no_decay_params = []

@@ -196,13 +196,6 @@ class Brain(nn.Module):
             if isinstance(mod, nn.BatchNorm1d):
                 mod.reset_running_stats()
 
-    def set_bn_attrs(self, **kwargs):
-        for mod in self.modules():
-            if isinstance(mod, nn.BatchNorm1d):
-                for k, v in kwargs.items():
-                    if hasattr(mod, k):
-                        setattr(mod, k, v)
-
     def freeze_bn(self, value: bool):
         self._freeze_bn = value
         return self.train(self.training)

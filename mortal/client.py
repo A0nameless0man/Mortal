@@ -42,7 +42,7 @@ def main():
     oracle = None
     mortal = Brain(version=version, num_blocks=num_blocks, conv_channels=conv_channels).to(device).eval()
     dqn = DQN(version=version).to(device)
-    train_player = TrainPlayer()
+    train_player = TrainPlayer(remote, version)
     param_version = -1
 
     pts = np.array([90, 45, 0, -135])

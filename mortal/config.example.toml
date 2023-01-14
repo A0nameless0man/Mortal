@@ -12,7 +12,6 @@ tensorboard_dir = '/path/to/dir'
 device = 'cuda:0'
 enable_cudnn_benchmark = false
 enable_amp = false
-enable_online_cql = true
 
 batch_size = 512
 opt_step_every = 1
@@ -20,6 +19,19 @@ opt_step_every = 1
 save_every = 400
 test_every = 20000
 submit_every = 400
+[norm_layer]
+name = "GroupNorm"
+momentum = 0.01
+group = 16
+
+[resnet]
+conv_channels = 320
+num_blocks = 40
+
+[freeze_bn]
+cycle = []
+mortal = false
+oracle = false
 
 # using env `TRAIN_PLAY_PROFILE`
 [train_play.default]
@@ -50,20 +62,8 @@ augmented_first = false
 gamma = 1
 pts = [3.0, 1.5, 0.0, -4.5]
 
-[resnet]
-conv_channels = 192
-num_blocks = 40
-
 [cql]
 min_q_weight = 5
-
-[freeze_bn]
-# `true` in online training
-mortal = false
-
-[bn_attrs]
-momentum = 0.01
-eps = 1e-3
 
 [optim]
 eps = 1e-8
@@ -89,7 +89,7 @@ state_file = '/path/to/baseline.pth'
 history_window = 50
 
 [online.remote]
-host = '127.0.0.1'
+host = '127.0.0.1' # to accept lan connection, use 0.0.0.0 
 port = 5000
 
 [online.server]
