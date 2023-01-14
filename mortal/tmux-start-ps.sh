@@ -36,7 +36,7 @@ tmux new-session -d -s $session
     tmux send-keys -t $session:$window.$panle "$py ./train_no_oracle.py" C-m
     tmux split-window -f -v -t $session:$window.$panle
     panle=$(($panle + 1))
-    count=8
+    count=7
     i=7
     while ((i <= $count))
     do
