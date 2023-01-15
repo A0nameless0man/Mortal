@@ -49,6 +49,8 @@ def main():
     history_window = config['online']['history_window']
     history = []
 
+    continues_fail_cnt = 0
+
     while True:
         while True:
             with socket.socket() as conn:
