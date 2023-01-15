@@ -147,8 +147,8 @@ def train():
     writer = SummaryWriter(config['control']['tensorboard_dir'])
     stats = {
         'dqn_loss': 0,
-        'cql_loss': 0,
-        'next_rank_loss': 0,
+        # 'cql_loss': 0,
+        # 'next_rank_loss': 0,
     }
     all_q = torch.zeros((save_every, batch_size), device=device, dtype=torch.float32)
     all_q_target = torch.zeros((save_every, batch_size), device=device, dtype=torch.float32)
@@ -238,19 +238,19 @@ def train():
                 q_out = current_dqn(phi, masks)
                 q = q_out[range(batch_size), actions]
                 dqn_loss = 0.5 * mse(q, q_target_mc)
-                cql_loss = 0
-                if not online:
-                    cql_loss = q_out.logsumexp(-1).mean() - q.mean()
-                next_rank_logits = next_rank_pred(phi)
-                next_rank_loss = ce(next_rank_logits, player_ranks)
-                loss = dqn_loss + cql_loss * min_q_weight + next_rank_loss * 0.2
+                # cql_loss = 0
+                # if not online:
+                #     cql_loss = q_out.logsumexp(-1).mean() - q.mean()
+                # next_rank_logits = next_rank_pred(phi)
+                # next_rank_loss = ce(next_rank_logits, player_ranks)
+                loss = dqn_loss # + cql_loss * min_q_weight + next_rank_loss * 0.2
             scaler.scale(loss / opt_step_every).backward()
 
             with torch.no_grad():
                 stats['dqn_loss'] += dqn_loss
-                if not online:
-                    stats['cql_loss'] += cql_loss
-                stats['next_rank_loss'] += next_rank_loss
+                # if not online:
+                #     stats['cql_loss'] += cql_loss
+                # stats['next_rank_loss'] += next_rank_loss
                 all_q[idx] = q
                 all_q_target[idx] = q_target_mc
 
@@ -291,9 +291,9 @@ def train():
                 all_q_target_1d = all_q_target.cpu().numpy().flatten()[::128]
 
                 writer.add_scalar('loss/dqn_loss', stats['dqn_loss'] / save_every, steps)
-                if not online:
-                    writer.add_scalar('loss/cql_loss', stats['cql_loss'] / save_every, steps)
-                writer.add_scalar('loss/next_rank_loss', stats['next_rank_loss'] / save_every, steps)
+                # if not online:
+                #     writer.add_scalar('loss/cql_loss', stats['cql_loss'] / save_every, steps)
+                # writer.add_scalar('loss/next_rank_loss', stats['next_rank_loss'] / save_every, steps)
                 writer.add_scalar('hparam/lr', scheduler.get_last_lr()[0], steps)
                 writer.add_histogram('q_predicted', all_q_1d, steps)
                 writer.add_histogram('q_target', all_q_target_1d, steps)
