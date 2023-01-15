@@ -15,7 +15,27 @@ from net_emit import send_msg,recv_msg
 from libriichi.arena import OneVsThree
 
 class TrainPlayer:
-    def __init__(self,server,version):
+    def __init__(self, server, version):
+        rsp = self.get_config(server)
+        cfg = rsp['cfg']
+        self.device = torch.device(cfg['device'])
+
+        self._up_date_model(rsp)
+
+        self.chal_version = version
+        self.log_dir =path.join(path.abspath("/tmp/mortal"), str(os.getpid()))
+        self.train_key = secrets.randbits(64)
+        self.train_seed = 10000
+
+        self.seed_count = cfg['games'] // 4
+        self.boltzmann_epsilon = cfg['boltzmann_epsilon']
+        self.boltzmann_temp = cfg['boltzmann_temp']
+        self.stochastic_latent = cfg.get('stochastic_latent', True)
+
+        self.repeats = cfg['repeats']
+        self.repeat_counter = 0
+
+    def get_config(self, server):
         profile = os.environ.get('TRAIN_PLAY_PROFILE', 'default')
         remote = server
         while True:
@@ -27,9 +47,14 @@ class TrainPlayer:
                     logging.info('test param has been updated')
                     break
                 time.sleep(3)
-        cfg = rsp['cfg']
-        device = torch.device(cfg['device'])
+        return rsp
 
+    def update(self, server):
+        rsp = self.get_config(server)
+        self._up_date_model(rsp)
+
+    def _up_date_model(self, rsp):
+        
         model_cfg = rsp['model_cfg']
         version = model_cfg['control'].get('version', 1)
         conv_channels = model_cfg['resnet']['conv_channels']
@@ -45,23 +70,10 @@ class TrainPlayer:
             stable_dqn,
             is_oracle = False,
             version = version,
-            device = device,
+            device = self.device,
             enable_amp = True,
             name = 'baseline',
         )
-
-        self.chal_version = version
-        self.log_dir =path.join(path.abspath("/tmp/mortal"), str(os.getpid()))
-        self.train_key = secrets.randbits(64)
-        self.train_seed = 10000
-
-        self.seed_count = cfg['games'] // 4
-        self.boltzmann_epsilon = cfg['boltzmann_epsilon']
-        self.boltzmann_temp = cfg['boltzmann_temp']
-        self.stochastic_latent = cfg.get('stochastic_latent', True)
-
-        self.repeats = cfg['repeats']
-        self.repeat_counter = 0
 
     def train_play(self, oracle, mortal, dqn, device):
         torch.backends.cudnn.benchmark = False

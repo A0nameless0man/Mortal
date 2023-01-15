@@ -1,5 +1,6 @@
 
 import os
+import secrets
 import prelude
 
 import logging
@@ -66,26 +67,28 @@ def main():
                     param_version = rsp['param_version']
                     break
                 time.sleep(3)
-        train_player = TrainPlayer(remote,version)
         mortal.load_state_dict(rsp['mortal'])
         dqn.load_state_dict(rsp['dqn'])
         logging.info('param has been updated')
+        train_player.update(remote)
         try:
             rankings, file_list = train_player.train_play(oracle, mortal, dqn, device)
             avg_rank = (rankings * np.arange(1, 5)).sum() / rankings.sum()
             avg_pt = (rankings * pts).sum() / rankings.sum()
             logging.info(f'trainee rankings: {rankings} ({avg_rank:.6}, {avg_pt:.6}pt)')
             logs = {}
+            nonce = secrets.randbits(64)
             for filename in file_list:
                 with open(filename, 'rb') as f:
-                    logs[path.basename(filename)] = f.read()
+                    logs[f'{nonce}-{path.basename(filename)}'] = f.read()
+                os.remove(filename)
             with socket.socket() as conn:
                 conn.connect(remote)
                 send_msg(conn, {
                     'type': 'submit_replay',
                     'logs': logs,
                 })
-                logging.info('logs have been submitted')
+                logging.info(f'logs have been submitted, nonce: {nonce}')
             continues_fail_cnt = 0
         except Exception as e:
             logging.exception('failed to game：%s',str(e))
