@@ -387,13 +387,11 @@ def train():
                     }, steps)
                     writer.add_scalar('test_play/fuuro_num', stat.avg_fuuro_num, steps)
                     writer.add_scalar('test_play/fuuro_point', stat.avg_fuuro_point, steps)
-                    writer.add_scalars(
+                    writer.add_scalar(
                             "time/test_time",
-                            {
-                                name: (test_end_time - test_start_time)
+                           (test_end_time - test_start_time)
                                 / test_games
-                                / test_round
-                            },
+                                / test_round ,
                             steps,
                         )
                     writer.flush()

@@ -73,7 +73,7 @@ def main():
         try:
             rankings, file_list = train_player.train_play(oracle, mortal, dqn, device)
             avg_rank = (rankings * np.arange(1, 5)).sum() / rankings.sum()
-            avg_pt = (rankings * np.array([90, 45, 0, -135])).sum() / rankings.sum()
+            avg_pt = (rankings * pts).sum() / rankings.sum()
             logging.info(f'trainee rankings: {rankings} ({avg_rank:.6}, {avg_pt:.6}pt)')
             logs = {}
             for filename in file_list:
@@ -92,10 +92,8 @@ def main():
             continues_fail_cnt += 1
             logging.info('continues_fail_cnt = %d', continues_fail_cnt)
             train_player.train_seed+=train_player.seed_count
+            continue
 
-        rankings, file_list = train_player.train_play(oracle, mortal, dqn, device)
-        avg_rank = (rankings * np.arange(1, 5)).sum() / rankings.sum()
-        avg_pt = (rankings * pts).sum() / rankings.sum()
 
         history.append(np.array(rankings))
         if len(history) > history_window:
