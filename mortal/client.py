@@ -105,19 +105,6 @@ def main():
         logging.info(f'trainee rankings: {rankings} ({avg_rank:.6}, {avg_pt:.6}pt)')
         logging.info(f'last {len(history)} sessions: {sum_rankings} ({ma_avg_rank:.6}, {ma_avg_pt:.6}pt)')
 
-        logs = {}
-        for filename in file_list:
-            with open(filename, 'rb') as f:
-                logs[path.basename(filename)] = f.read()
-
-        with socket.socket() as conn:
-            conn.connect(remote)
-            send_msg(conn, {
-                'type': 'submit_replay',
-                'logs': logs,
-                'param_version': param_version,
-            })
-            logging.info('logs have been submitted')
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
