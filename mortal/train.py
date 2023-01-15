@@ -33,6 +33,7 @@ def train():
     version = config['control']['version']
 
     online = config['control']['online']
+    online_test = config['control']['online_test']
     batch_size = config['control']['batch_size']
     opt_step_every = config['control']['opt_step_every']
     save_every = config['control']['save_every']
@@ -157,6 +158,9 @@ def train():
     def train_epoch():
         nonlocal steps
         nonlocal idx
+        nonlocal freeze_bn_val
+        nonlocal test_player
+        nonlocal batch_start_time
 
         player_names = []
         if online:
@@ -326,7 +330,7 @@ def train():
 
                 if steps % test_every == 0:
                     test_start_time = time.time()
-                    if online:
+                    if online_test:
                         test_player = TestPlayer()
 
                     stat = test_player.test_play(test_games // 4, test_round, mortal, current_dqn, device)
