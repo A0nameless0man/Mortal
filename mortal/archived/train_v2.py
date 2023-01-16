@@ -454,7 +454,6 @@ def train():
             # only run one epoch for offline for easier control
             break
 
-
 def main():
     import os
     import sys
