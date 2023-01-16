@@ -41,8 +41,8 @@ def train():
     submit_every = config['control']['submit_every']
     test_games = config['test_play']['games']
     test_round = config["test_play"]["round"]
-    min_q_weight = config['cql']['min_q_weight']
-    next_rank_weight = config['aux']['next_rank_weight']
+    # min_q_weight = config['cql']['min_q_weight']
+    # next_rank_weight = config['aux']['next_rank_weight']
     assert save_every % opt_step_every == 0
     assert test_every % save_every == 0
 
