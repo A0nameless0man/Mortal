@@ -91,7 +91,7 @@ def train():
         {'params': decay_params, 'weight_decay': weight_decay},
         {'params': no_decay_params},
     ]
-    optimizer = optim.AdamW(param_groups, lr=1, weight_decay=0, betas=betas, eps=eps)
+    optimizer = optim.Adam(param_groups, lr=1, weight_decay=0, betas=betas, eps=eps)
     scheduler = LinearWarmUpCosineAnnealingLR(optimizer, **config['optim']['scheduler'])
     scaler = GradScaler(enabled=enable_amp)
     test_player = TestPlayer()
@@ -112,7 +112,7 @@ def train():
         next_rank_pred.load_state_dict(state['next_rank_pred'])
         if not online or state['config']['control']['online']:
             optimizer.load_state_dict(state['optimizer'])
-            scheduler.load_state_dict(state['scheduler'])
+            # scheduler.load_state_dict(state['scheduler'])
         scaler.load_state_dict(state['scaler'])
         best_perf = state['best_perf']
         steps = state['steps']
@@ -120,15 +120,17 @@ def train():
     freeze_bn_val:bool = config["freeze_bn"]["mortal"]
     freeze_bn_cycles: list[int] = config["freeze_bn"]["cycle"]
     freeze_bn_cycle = 0
+    freeze_bn_change_step:list[int] = []
     assert len(freeze_bn_cycles) %2 == 0
     for i in range(len(freeze_bn_cycles)):
+        freeze_bn_change_step.append(freeze_bn_cycle)
         freeze_bn_cycle += freeze_bn_cycles[i]
-        freeze_bn_cycles[i] = freeze_bn_cycle
-    for i in range(len(freeze_bn_cycles)):
-        if steps % freeze_bn_cycle > freeze_bn_cycles[i]:
-            freeze_bn_val ^= (i % 2 == 0)
+    freeze_bn_change_step.append(freeze_bn_cycle)
+    for i in range(len(freeze_bn_change_step)):
+        if steps % freeze_bn_cycle < freeze_bn_change_step[i]:
+            if  i % 2 == 0:
+                freeze_bn_val = not freeze_bn_val
             break
-
     logging.info(f"freeze_bn_val: {freeze_bn_val}")
     mortal.freeze_bn(freeze_bn_val)
 
@@ -268,17 +270,23 @@ def train():
             scheduler.step()
             pb.update(1)
 
-            if freeze_bn_cycle != 0 and steps % freeze_bn_cycle in freeze_bn_cycles:
+            if freeze_bn_cycle != 0 and steps % freeze_bn_cycle in freeze_bn_change_step:
+                writer.add_scalar(
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps - 1
+                )
                 freeze_bn_val = not freeze_bn_val # type: ignore
-                mortal.freeze_bn(freeze_bn_val)
                 writer.add_scalar(
                     "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
                 )
+                mortal.freeze_bn(freeze_bn_val)
                 logging.info(f"freeze_bn_val: {freeze_bn_val}")
 
             if online and steps % submit_every == 0:
                 submit_param(None, mortal, current_dqn, is_idle=False)
                 logging.info('param has been submitted')
+                writer.add_scalar(
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
+                )
 
             if steps % save_every == 0:
                 pb.close()
@@ -325,10 +333,6 @@ def train():
                 }
                 torch.save(state, state_file)
 
-                if online and steps % submit_every != 0:
-                    submit_param(None, mortal, current_dqn, is_idle=False)
-                    logging.info('param has been submitted')
-
                 if steps % test_every == 0:
                     test_start_time = time.time()
                     if online_test:
@@ -348,46 +352,46 @@ def train():
 
                     logging.info(f'avg rank: {stat.avg_rank:.6}')
                     logging.info(f'avg pt: {avg_pt:.6}')
-                    writer.add_scalar('test_play/avg_ranking', stat.avg_rank, steps)
-                    writer.add_scalar('test_play/avg_pt', avg_pt, steps)
-                    writer.add_scalars('test_play/ranking', {
+                    writer.add_scalar('test_play_tenhon/avg_ranking', stat.avg_rank, steps)
+                    writer.add_scalar('test_play_tenhon/avg_pt', avg_pt, steps)
+                    writer.add_scalars('test_play_tenhon/ranking', {
                         '1st': stat.rank_1_rate,
                         '2nd': stat.rank_2_rate,
                         '3rd': stat.rank_3_rate,
                         '4th': stat.rank_4_rate,
                     }, steps)
-                    writer.add_scalars('test_play/behavior', {
+                    writer.add_scalars('test_play_tenhon/behavior', {
                         'agari': stat.agari_rate,
                         'houjuu': stat.houjuu_rate,
                         'fuuro': stat.fuuro_rate,
                         'riichi': stat.riichi_rate,
                     }, steps)
-                    writer.add_scalars('test_play/agari_point', {
+                    writer.add_scalars('test_play_tenhon/agari_point', {
                         'overall': stat.avg_point_per_agari,
                         'riichi': stat.avg_point_per_riichi_agari,
                         'fuuro': stat.avg_point_per_fuuro_agari,
                         'dama': stat.avg_point_per_dama_agari,
                     }, steps)
-                    writer.add_scalar('test_play/houjuu_point', stat.avg_point_per_houjuu, steps)
-                    writer.add_scalar('test_play/point_per_round', stat.avg_point_per_round, steps)
-                    writer.add_scalars('test_play/key_step', {
+                    writer.add_scalar('test_play_tenhon/houjuu_point', stat.avg_point_per_houjuu, steps)
+                    writer.add_scalar('test_play_tenhon/point_per_round', stat.avg_point_per_round, steps)
+                    writer.add_scalars('test_play_tenhon/key_step', {
                         'agari_jun': stat.avg_agari_jun,
                         'houjuu_jun': stat.avg_houjuu_jun,
                         'riichi_jun': stat.avg_riichi_jun,
                     }, steps)
-                    writer.add_scalars('test_play/riichi', {
+                    writer.add_scalars('test_play_tenhon/riichi', {
                         'agari_after_riichi': stat.agari_rate_after_riichi,
                         'houjuu_after_riichi': stat.houjuu_rate_after_riichi,
                         'chasing_riichi': stat.chasing_riichi_rate,
                         'riichi_chased': stat.riichi_chased_rate,
                     }, steps)
-                    writer.add_scalar('test_play/riichi_point', stat.avg_riichi_point, steps)
-                    writer.add_scalars('test_play/fuuro', {
+                    writer.add_scalar('test_play_tenhon/riichi_point', stat.avg_riichi_point, steps)
+                    writer.add_scalars('test_play_tenhon/fuuro', {
                         'agari_after_fuuro': stat.agari_rate_after_fuuro,
                         'houjuu_after_fuuro': stat.houjuu_rate_after_fuuro,
                     }, steps)
-                    writer.add_scalar('test_play/fuuro_num', stat.avg_fuuro_num, steps)
-                    writer.add_scalar('test_play/fuuro_point', stat.avg_fuuro_point, steps)
+                    writer.add_scalar('test_play_tenhon/fuuro_num', stat.avg_fuuro_num, steps)
+                    writer.add_scalar('test_play_tenhon/fuuro_point', stat.avg_fuuro_point, steps)
                     writer.add_scalar(
                             "time/test_time",
                            (test_end_time - test_start_time)

@@ -147,7 +147,7 @@ class Brain(nn.Module):
             case 2:
                 pass
             case 3:
-                norm_builder = partial(nn.BatchNorm1d, conv_channels, momentum=0.01, eps=1e-3)
+                norm_builder = partial(nn.BatchNorm1d, conv_channels, momentum=norm_momentum, eps=1e-3)
             case _:
                 raise ValueError(f'Unexpected version {self.version}')
 
