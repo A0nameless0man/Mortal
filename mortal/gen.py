@@ -22,6 +22,7 @@ def gen():
     device = torch.device(config["control"]["device"])
     version = config['control']['version']
     eps = config['optim']['eps']
+    lr = config['optim']['lr']
     betas = config['optim']['betas']
     weight_decay = config['optim']['weight_decay']
 
@@ -53,8 +54,8 @@ def gen():
         {'params': decay_params, 'weight_decay': weight_decay},
         {'params': no_decay_params},
     ]
-    optimizer = optim.AdamW(param_groups, lr=1, weight_decay=0, betas=betas, eps=eps)
-    scheduler = LinearWarmUpCosineAnnealingLR(optimizer, **config['optim']['scheduler'])
+    optimizer = optim.AdamW(param_groups, lr=lr, weight_decay=0, betas=betas, eps=eps)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, **config['optim']['scheduler'])
     scaler = GradScaler()
 
     steps = 0

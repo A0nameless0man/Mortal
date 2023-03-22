@@ -58,6 +58,7 @@ def train():
     enable_augmentation = config['dataset']['enable_augmentation']
     augmented_first = config['dataset']['augmented_first']
     eps = config['optim']['eps']
+    lr = config['optim']['lr']
     betas = config['optim']['betas']
     weight_decay = config['optim']['weight_decay']
     max_grad_norm = config['optim']['max_grad_norm']
@@ -91,8 +92,10 @@ def train():
         {'params': decay_params, 'weight_decay': weight_decay},
         {'params': no_decay_params},
     ]
-    optimizer = optim.Adam(param_groups, lr=1, weight_decay=0, betas=betas, eps=eps)
-    scheduler = LinearWarmUpCosineAnnealingLR(optimizer, **config['optim']['scheduler'])
+    optimizer = optim.Adam(param_groups, lr=lr, weight_decay=0, betas=betas, eps=eps)
+    # scheduler = LinearWarmUpCosineAnnealingLR(optimizer, **config['optim']['scheduler'])
+    scheduler = optim.lr_scheduler.StepLR(optimizer, **config['optim']['scheduler'])
+    # scheduler = StepLR
     scaler = GradScaler(enabled=enable_amp)
     test_player = TestPlayer()
     best_perf = {
@@ -112,7 +115,7 @@ def train():
         next_rank_pred.load_state_dict(state['next_rank_pred'])
         if not online or state['config']['control']['online']:
             optimizer.load_state_dict(state['optimizer'])
-            # scheduler.load_state_dict(state['scheduler'])
+            scheduler.load_state_dict(state['scheduler'])
         scaler.load_state_dict(state['scaler'])
         best_perf = state['best_perf']
         steps = state['steps']
@@ -121,16 +124,17 @@ def train():
     freeze_bn_cycles: list[int] = config["freeze_bn"]["cycle"]
     freeze_bn_cycle = 0
     freeze_bn_change_step:list[int] = []
-    assert len(freeze_bn_cycles) %2 == 0
-    for i in range(len(freeze_bn_cycles)):
+    if len(freeze_bn_cycles) != 0:
+        assert len(freeze_bn_cycles) %2 == 0
+        for i in range(len(freeze_bn_cycles)):
+            freeze_bn_change_step.append(freeze_bn_cycle)
+            freeze_bn_cycle += freeze_bn_cycles[i]
         freeze_bn_change_step.append(freeze_bn_cycle)
-        freeze_bn_cycle += freeze_bn_cycles[i]
-    freeze_bn_change_step.append(freeze_bn_cycle)
-    for i in range(len(freeze_bn_change_step)):
-        if steps % freeze_bn_cycle < freeze_bn_change_step[i]:
-            if  i % 2 == 0:
-                freeze_bn_val = not freeze_bn_val
-            break
+        for i in range(len(freeze_bn_change_step)):
+            if steps % freeze_bn_cycle < freeze_bn_change_step[i]:
+                if  i % 2 == 0:
+                    freeze_bn_val = not freeze_bn_val
+                break
     logging.info(f"freeze_bn_val: {freeze_bn_val}")
     mortal.freeze_bn(freeze_bn_val)
 
@@ -304,6 +308,7 @@ def train():
                 #     writer.add_scalar('loss/cql_loss', stats['cql_loss'] / save_every, steps)
                 # writer.add_scalar('loss/next_rank_loss', stats['next_rank_loss'] / save_every, steps)
                 writer.add_scalar('hparam/lr', scheduler.get_last_lr()[0], steps)
+                writer.add_scalar('hparam/bn_momentum', mortal.get_bn_momentum(), steps)
                 writer.add_histogram('q_predicted', all_q_1d, steps)
                 writer.add_histogram('q_target', all_q_target_1d, steps)
                 now_time = time.time()

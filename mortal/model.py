@@ -190,6 +190,19 @@ class Brain(nn.Module):
                     # I don't think this benefits
                     # module.requires_grad_(False)
         return self
+    
+    def set_bn_momentum(self, momentum:float):
+        for mod in self.modules():
+            if isinstance(mod, nn.BatchNorm1d):
+                mod.momentum = momentum
+        return self
+
+    def get_bn_momentum(self):
+        if not self._freeze_bn:
+            for mod in self.modules():
+                if isinstance(mod, nn.BatchNorm1d):
+                    return mod.momentum
+        return 0.0
 
     def reset_running_stats(self):
         for mod in self.modules():
