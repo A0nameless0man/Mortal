@@ -55,7 +55,6 @@ def gen():
         {'params': no_decay_params},
     ]
     optimizer = optim.AdamW(param_groups, lr=lr, weight_decay=0, betas=betas, eps=eps)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, **config['optim']['scheduler'])
     scaler = GradScaler()
 
     steps = 0
@@ -71,7 +70,6 @@ def gen():
         'current_dqn': current_dqn.state_dict(),
         'next_rank_pred': next_rank_pred.state_dict(),
         'optimizer': optimizer.state_dict(),
-        'scheduler': scheduler.state_dict(),
         'scaler': scaler.state_dict(),
         'steps': steps,
         'timestamp': datetime.now().timestamp(),

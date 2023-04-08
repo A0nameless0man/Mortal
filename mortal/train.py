@@ -1,4 +1,6 @@
+import math
 import time
+from typing import Callable, List
 
 
 def train():
@@ -22,7 +24,13 @@ def train():
     from torch.nn.utils import clip_grad_norm_
     from torch.utils.data import DataLoader
     from torch.utils.tensorboard import SummaryWriter
-    from common import submit_param, parameter_count, drain, filtered_trimmed_lines, tqdm
+    from common import (
+        submit_param,
+        parameter_count,
+        drain,
+        filtered_trimmed_lines,
+        tqdm,
+    )
     from player import TestPlayer
     from dataloader import FileDatasetsIter, worker_init_fn
     from lr_scheduler import LinearWarmUpCosineAnnealingLR
@@ -30,51 +38,53 @@ def train():
     from libriichi.consts import obs_shape
     from config import config
 
-    version = config['control']['version']
+    version = config["control"]["version"]
 
-    online = config['control']['online']
-    online_test = config['control']['online_test']
-    batch_size = config['control']['batch_size']
-    opt_step_every = config['control']['opt_step_every']
-    save_every = config['control']['save_every']
-    test_every = config['control']['test_every']
-    submit_every = config['control']['submit_every']
-    test_games = config['test_play']['games']
+    online = config["control"]["online"]
+    online_test = config["control"]["online_test"]
+    batch_size = config["control"]["batch_size"]
+    base_opt_step_every = config["control"]["opt_step_every"]
+    save_every = config["control"]["save_every"]
+    test_every = config["control"]["test_every"]
+    submit_every = config["control"]["submit_every"]
+    test_games = config["test_play"]["games"]
     test_round = config["test_play"]["round"]
     # min_q_weight = config['cql']['min_q_weight']
     # next_rank_weight = config['aux']['next_rank_weight']
-    assert save_every % opt_step_every == 0
+    assert save_every % base_opt_step_every == 0
     assert test_every % save_every == 0
 
-    device = torch.device(config['control']['device'])
-    torch.backends.cudnn.benchmark = config['control']['enable_cudnn_benchmark']
-    enable_amp = config['control']['enable_amp']
+    device = torch.device(config["control"]["device"])
+    torch.backends.cudnn.benchmark = config["control"]["enable_cudnn_benchmark"]
+    enable_amp = config["control"]["enable_amp"]
 
-    pts = config['env']['pts']
-    gamma = config['env']['gamma']
-    file_batch_size = config['dataset']['file_batch_size']
-    num_workers = config['dataset']['num_workers']
-    num_epochs = config['dataset']['num_epochs']
-    enable_augmentation = config['dataset']['enable_augmentation']
-    augmented_first = config['dataset']['augmented_first']
-    eps = config['optim']['eps']
-    lr = config['optim']['lr']
-    betas = config['optim']['betas']
-    weight_decay = config['optim']['weight_decay']
-    max_grad_norm = config['optim']['max_grad_norm']
-    norm_config = config.get('norm_layer', None)
+    pts = config["env"]["pts"]
+    gamma = config["env"]["gamma"]
+    file_batch_size = config["dataset"]["file_batch_size"]
+    num_workers = config["dataset"]["num_workers"]
+    num_epochs = config["dataset"]["num_epochs"]
+    enable_augmentation = config["dataset"]["enable_augmentation"]
+    augmented_first = config["dataset"]["augmented_first"]
+    eps = config["optim"]["eps"]
+    lr = config["optim"]["lr"]
+    betas = config["optim"]["betas"]
+    weight_decay = config["optim"]["weight_decay"]
+    max_grad_norm = config["optim"]["max_grad_norm"]
+    norm_config: dict = config.get("norm_layer", {})
 
-    mortal = Brain(version=version, **config['resnet'], norm_config=norm_config).to(device)
+    mortal = Brain(version=version, **config["resnet"], norm_config=norm_config).to(
+        device
+    )
     current_dqn = DQN(version=version).to(device)
     next_rank_pred = NextRankPredictor().to(device)
 
-    logging.info(f'version: {version}')
-    logging.info(f'mortal params: {parameter_count(mortal):,}')
-    logging.info(f'dqn params: {parameter_count(current_dqn):,}')
-    logging.info(f'next_rank_pred params: {parameter_count(next_rank_pred):,}')
-    logging.info(f'obs shape: {obs_shape(version)}')
+    logging.info(f"version: {version}")
+    logging.info(f"mortal params: {parameter_count(mortal):,}")
+    logging.info(f"dqn params: {parameter_count(current_dqn):,}")
+    logging.info(f"next_rank_pred params: {parameter_count(next_rank_pred):,}")
+    logging.info(f"obs shape: {obs_shape(version)}")
 
-    mortal.freeze_bn(config['freeze_bn']['mortal'])
+    mortal.freeze_bn(config["freeze_bn"]["mortal"])
 
     decay_params = []
     no_decay_params = []
@@ -84,55 +94,116 @@ def train():
         for mod_name, mod in model.named_modules():
             for name, param in mod.named_parameters(prefix=mod_name, recurse=False):
                 params_dict[name] = param
-                if isinstance(mod, (nn.Linear, nn.Conv1d)) and name.endswith('weight'):
+                if isinstance(mod, (nn.Linear, nn.Conv1d)) and name.endswith("weight"):
                     to_decay.add(name)
         decay_params.extend(params_dict[name] for name in sorted(to_decay))
-        no_decay_params.extend(params_dict[name] for name in sorted(params_dict.keys() - to_decay))
+        no_decay_params.extend(
+            params_dict[name] for name in sorted(params_dict.keys() - to_decay)
+        )
     param_groups = [
-        {'params': decay_params, 'weight_decay': weight_decay},
-        {'params': no_decay_params},
+        {"params": decay_params, "weight_decay": weight_decay},
+        {"params": no_decay_params},
     ]
     optimizer = optim.Adam(param_groups, lr=lr, weight_decay=0, betas=betas, eps=eps)
     # scheduler = LinearWarmUpCosineAnnealingLR(optimizer, **config['optim']['scheduler'])
-    scheduler = optim.lr_scheduler.StepLR(optimizer, **config['optim']['scheduler'])
+
+    norm_scheduler_config = config["norm"]["scheduler"]
+
+    def step_scheduler(step_size: int, gamma: float, **kargs) -> Callable[[int], float]:
+        def calc(step: int) -> float:
+            return gamma ** (step // step_size)
+
+        return calc
+
+    def exp_step_scheduler(
+        step_size: int, gamma: float, **kargs
+    ) -> Callable[[int], float]:
+        def calc(step: int) -> float:
+            return gamma ** math.log(step // step_size, 2)
+
+        return calc
+
+    def stage_scheduler_step(
+        left=0, right=-1, type="step", **kargs
+    ) -> Callable[[int], float]:
+        match type:
+            case "step":
+                internal_calc = step_scheduler(**kargs)
+            case "exp_step":
+                internal_calc = exp_step_scheduler(**kargs)
+            case _:
+                internal_calc = lambda x: float(1)
+
+        def calc(step: int):
+            if step <= left:
+                return 1
+            if left != -1 and step > right:
+                step = right
+            step -= left
+            return internal_calc(step)
+
+        return calc
+
+    def stage_scheduler(stages: List[dict]) -> Callable[[int], float]:
+        funcs = [stage_scheduler_step(**args) for args in stages]
+
+        def calc(step: int):
+            gamma = 1.0
+            for f in funcs:
+                gamma *= f(step)
+            return gamma
+
+        return calc
+
+    norm_scheduler = stage_scheduler(**norm_scheduler_config)
+    optim_size_scheduler =  stage_scheduler(**config["optim_size"]["scheduler"])
+    base_norm_momentum = norm_config.get("momentum", 0)
+    scheduler = optim.lr_scheduler.LambdaLR(
+        optimizer, stage_scheduler(**config["optim"]["scheduler"])
+    )
+
     # scheduler = StepLR
     scaler = GradScaler(enabled=enable_amp)
     test_player = TestPlayer()
     best_perf = {
-        'avg_rank': 4.,
-        'avg_pt': -135.,
+        "avg_rank": 4.0,
+        "avg_pt": -135.0,
     }
 
     steps = 0
-    state_file = config['control']['state_file']
-    best_state_file = config['control']['best_state_file']
+    state_file = config["control"]["state_file"]
+    best_state_file = config["control"]["best_state_file"]
     if path.exists(state_file):
         state = torch.load(state_file, map_location=device)
-        timestamp = datetime.fromtimestamp(state['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
-        logging.info(f'loaded: {timestamp}')
-        mortal.load_state_dict(state['mortal'])
-        current_dqn.load_state_dict(state['current_dqn'])
-        next_rank_pred.load_state_dict(state['next_rank_pred'])
-        if not online or state['config']['control']['online']:
-            optimizer.load_state_dict(state['optimizer'])
-            scheduler.load_state_dict(state['scheduler'])
-        scaler.load_state_dict(state['scaler'])
-        best_perf = state['best_perf']
-        steps = state['steps']
+        timestamp = datetime.fromtimestamp(state["timestamp"]).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        logging.info(f"loaded: {timestamp}")
+        mortal.load_state_dict(state["mortal"])
+        current_dqn.load_state_dict(state["current_dqn"])
+        next_rank_pred.load_state_dict(state["next_rank_pred"])
+        if not online or state["config"]["control"]["online"]:
+            optimizer.load_state_dict(state["optimizer"])
+            # scheduler.load_state_dict(state["scheduler"])
+        scaler.load_state_dict(state["scaler"])
+        best_perf = state["best_perf"]
+        steps = state["steps"]
+    mortal.set_bn_momentum(base_norm_momentum * norm_scheduler(steps))
+    opt_step_every = int(base_opt_step_every*optim_size_scheduler(steps))
 
-    freeze_bn_val:bool = config["freeze_bn"]["mortal"]
+    freeze_bn_val: bool = config["freeze_bn"]["mortal"]
     freeze_bn_cycles: list[int] = config["freeze_bn"]["cycle"]
     freeze_bn_cycle = 0
-    freeze_bn_change_step:list[int] = []
+    freeze_bn_change_step: list[int] = []
     if len(freeze_bn_cycles) != 0:
-        assert len(freeze_bn_cycles) %2 == 0
+        assert len(freeze_bn_cycles) % 2 == 0
         for i in range(len(freeze_bn_cycles)):
             freeze_bn_change_step.append(freeze_bn_cycle)
             freeze_bn_cycle += freeze_bn_cycles[i]
         freeze_bn_change_step.append(freeze_bn_cycle)
         for i in range(len(freeze_bn_change_step)):
             if steps % freeze_bn_cycle < freeze_bn_change_step[i]:
-                if  i % 2 == 0:
+                if i % 2 == 0:
                     freeze_bn_val = not freeze_bn_val
                 break
     logging.info(f"freeze_bn_val: {freeze_bn_val}")
@@ -140,25 +211,26 @@ def train():
 
     optimizer.zero_grad(set_to_none=True)
     mse = nn.MSELoss()
-    ce = nn.CrossEntropyLoss()
 
-    if device.type == 'cuda':
-        logging.info(f'device: {device} ({torch.cuda.get_device_name(device)})')
+    if device.type == "cuda":
+        logging.info(f"device: {device} ({torch.cuda.get_device_name(device)})")
     else:
-        logging.info(f'device: {device}')
+        logging.info(f"device: {device}")
 
     if online:
         submit_param(None, mortal, current_dqn, is_idle=True)
-        logging.info('param has been submitted')
+        logging.info("param has been submitted")
 
-    writer = SummaryWriter(config['control']['tensorboard_dir'])
+    writer = SummaryWriter(config["control"]["tensorboard_dir"])
     stats = {
-        'dqn_loss': 0,
+        "dqn_loss": 0,
         # 'cql_loss': 0,
         # 'next_rank_loss': 0,
     }
     all_q = torch.zeros((save_every, batch_size), device=device, dtype=torch.float32)
-    all_q_target = torch.zeros((save_every, batch_size), device=device, dtype=torch.float32)
+    all_q_target = torch.zeros(
+        (save_every, batch_size), device=device, dtype=torch.float32
+    )
     idx = 0
     batch_start_time = time.time()
 
@@ -168,67 +240,77 @@ def train():
         nonlocal freeze_bn_val
         nonlocal test_player
         nonlocal batch_start_time
+        nonlocal opt_step_every
 
         player_names = []
         if online:
-            player_names = ['trainee']
+            player_names = ["trainee"]
             dirname = drain()
             file_list = list(map(lambda p: path.join(dirname, p), os.listdir(dirname)))
         else:
-            for filename in config['dataset']['player_names_files']:
+            for filename in config["dataset"]["player_names_files"]:
                 with open(filename) as f:
                     player_names.extend(filtered_trimmed_lines(f))
             player_names_set = set(player_names)
             player_names = list(player_names_set)
-            logging.info(f'loaded {len(player_names):,} players')
+            logging.info(f"loaded {len(player_names):,} players")
 
-            file_index = config['dataset']['file_index']
+            file_index = config["dataset"]["file_index"]
             if path.exists(file_index):
                 index = torch.load(file_index)
-                file_list = index['file_list']
+                file_list = index["file_list"]
             else:
-                logging.info('building file index...')
+                logging.info("building file index...")
                 file_list = []
-                for pat in config['dataset']['globs']:
+                for pat in config["dataset"]["globs"]:
                     file_list.extend(glob(pat, recursive=True))
                 if len(player_names_set) > 0:
                     filtered = []
-                    for filename in tqdm(file_list, unit='file'):
-                        with gzip.open(filename, 'rt') as f:
+                    for filename in tqdm(file_list, unit="file"):
+                        with gzip.open(filename, "rt") as f:
                             start = json.loads(next(f))
-                            if not set(start['names']).isdisjoint(player_names_set):
+                            if not set(start["names"]).isdisjoint(player_names_set):
                                 filtered.append(filename)
                     file_list = filtered
                 file_list.sort(reverse=True)
-                torch.save({'file_list': file_list}, file_index)
-        logging.info(f'file list size: {len(file_list):,}')
+                torch.save({"file_list": file_list}, file_index)
+        logging.info(f"file list size: {len(file_list):,}")
 
         before_next_test_play = (test_every - steps % test_every) % test_every
-        logging.info(f'total steps: {steps:,} (~{before_next_test_play:,})')
+        logging.info(f"total steps: {steps:,} (~{before_next_test_play:,})")
 
         if num_workers > 1:
             random.shuffle(file_list)
         file_data = FileDatasetsIter(
-            version = version,
-            file_list = file_list,
-            pts = pts,
-            file_batch_size = file_batch_size,
-            player_names = player_names,
-            num_epochs = num_epochs,
-            enable_augmentation = enable_augmentation,
-            augmented_first = augmented_first,
+            version=version,
+            file_list=file_list,
+            pts=pts,
+            file_batch_size=file_batch_size,
+            player_names=player_names,
+            num_epochs=num_epochs,
+            enable_augmentation=enable_augmentation,
+            augmented_first=augmented_first,
         )
-        data_loader = iter(DataLoader(
-            dataset = file_data,
-            batch_size = batch_size,
-            drop_last = True,
-            num_workers = num_workers,
-            pin_memory = True,
-            worker_init_fn = worker_init_fn,
-        ))
+        data_loader = iter(
+            DataLoader(
+                dataset=file_data,
+                batch_size=batch_size,
+                drop_last=True,
+                num_workers=num_workers,
+                pin_memory=True,
+                worker_init_fn=worker_init_fn,
+            )
+        )
 
-        pb = tqdm(total=save_every, desc='TRAIN', initial=steps % save_every)
-        for obs, actions, masks, steps_to_done, kyoku_rewards, player_ranks in data_loader:
+        pb = tqdm(total=save_every, desc="TRAIN", initial=steps % save_every)
+        for (
+            obs,
+            actions,
+            masks,
+            steps_to_done,
+            kyoku_rewards,
+            player_ranks,
+        ) in data_loader:
             obs = obs.to(dtype=torch.float32, device=device)
             actions = actions.to(dtype=torch.int64, device=device)
             masks = masks.to(dtype=torch.bool, device=device)
@@ -237,7 +319,7 @@ def train():
             player_ranks = player_ranks.to(dtype=torch.int64, device=device)
             assert masks[range(batch_size), actions].all()
 
-            q_target_mc = gamma ** steps_to_done * kyoku_rewards
+            q_target_mc = gamma**steps_to_done * kyoku_rewards
             q_target_mc = q_target_mc.to(torch.float32)
 
             with torch.autocast(device.type, enabled=enable_amp):
@@ -250,11 +332,11 @@ def train():
                 #     cql_loss = q_out.logsumexp(-1).mean() - q.mean()
                 # next_rank_logits = next_rank_pred(phi)
                 # next_rank_loss = ce(next_rank_logits, player_ranks)
-                loss = dqn_loss # + cql_loss * min_q_weight + next_rank_loss * next_rank_weight
+                loss = dqn_loss  # + cql_loss * min_q_weight + next_rank_loss * next_rank_weight
             scaler.scale(loss / opt_step_every).backward()
 
             with torch.no_grad():
-                stats['dqn_loss'] += dqn_loss
+                stats["dqn_loss"] += dqn_loss
                 # if not online:
                 #     stats['cql_loss'] += cql_loss
                 # stats['next_rank_loss'] += next_rank_loss
@@ -266,7 +348,9 @@ def train():
             if idx % opt_step_every == 0:
                 if max_grad_norm > 0:
                     scaler.unscale_(optimizer)
-                    params = chain.from_iterable(g['params'] for g in optimizer.param_groups)
+                    params = chain.from_iterable(
+                        g["params"] for g in optimizer.param_groups
+                    )
                     clip_grad_norm_(params, max_grad_norm)
                 scaler.step(optimizer)
                 scaler.update()
@@ -274,43 +358,53 @@ def train():
             scheduler.step()
             pb.update(1)
 
-            if freeze_bn_cycle != 0 and steps % freeze_bn_cycle in freeze_bn_change_step:
+            mortal.set_bn_momentum(base_norm_momentum * norm_scheduler(steps))
+            opt_step_every = int(base_opt_step_every*optim_size_scheduler(steps))
+            if (
+                freeze_bn_cycle != 0
+                and steps % freeze_bn_cycle in freeze_bn_change_step
+            ):
                 writer.add_scalar(
-                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps - 1
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0, steps - 1
                 )
-                freeze_bn_val = not freeze_bn_val # type: ignore
+                freeze_bn_val = not freeze_bn_val  # type: ignore
                 writer.add_scalar(
-                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0, steps
                 )
                 mortal.freeze_bn(freeze_bn_val)
                 logging.info(f"freeze_bn_val: {freeze_bn_val}")
 
             if online and steps % submit_every == 0:
                 submit_param(None, mortal, current_dqn, is_idle=False)
-                logging.info('param has been submitted')
+                logging.info("param has been submitted")
                 writer.add_scalar(
-                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0, steps
                 )
 
             if steps % save_every == 0:
                 pb.close()
 
                 writer.add_scalar(
-                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0 ,steps
+                    "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0, steps
                 )
 
                 # downsample to reduce tensorboard event size
                 all_q_1d = all_q.cpu().numpy().flatten()[::128]
                 all_q_target_1d = all_q_target.cpu().numpy().flatten()[::128]
 
-                writer.add_scalar('loss/dqn_loss', stats['dqn_loss'] / save_every, steps)
+                writer.add_scalar(
+                    "loss/dqn_loss", stats["dqn_loss"] / save_every, steps
+                )
                 # if not online:
                 #     writer.add_scalar('loss/cql_loss', stats['cql_loss'] / save_every, steps)
                 # writer.add_scalar('loss/next_rank_loss', stats['next_rank_loss'] / save_every, steps)
-                writer.add_scalar('hparam/lr', scheduler.get_last_lr()[0], steps)
-                writer.add_scalar('hparam/bn_momentum', mortal.get_bn_momentum(), steps)
-                writer.add_histogram('q_predicted', all_q_1d, steps)
-                writer.add_histogram('q_target', all_q_target_1d, steps)
+                writer.add_scalar("hparam/lr", scheduler.get_last_lr()[0], steps)
+                writer.add_scalar(
+                    "hparam/optm_size", batch_size * opt_step_every, steps
+                )
+                writer.add_scalar("hparam/bn_momentum", mortal.get_bn_momentum(), steps)
+                writer.add_histogram("q_predicted", all_q_1d, steps)
+                writer.add_histogram("q_target", all_q_target_1d, steps)
                 now_time = time.time()
                 writer.add_scalar(
                     "time/batch_time", (now_time - batch_start_time) / save_every, steps
@@ -322,19 +416,19 @@ def train():
                 idx = 0
 
                 before_next_test_play = (test_every - steps % test_every) % test_every
-                logging.info(f'total steps: {steps:,} (~{before_next_test_play:,})')
+                logging.info(f"total steps: {steps:,} (~{before_next_test_play:,})")
 
                 state = {
-                    'mortal': mortal.state_dict(),
-                    'current_dqn': current_dqn.state_dict(),
-                    'next_rank_pred': next_rank_pred.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    'scaler': scaler.state_dict(),
-                    'steps': steps,
-                    'timestamp': datetime.now().timestamp(),
-                    'best_perf': best_perf,
-                    'config': config,
+                    "mortal": mortal.state_dict(),
+                    "current_dqn": current_dqn.state_dict(),
+                    "next_rank_pred": next_rank_pred.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "scaler": scaler.state_dict(),
+                    "steps": steps,
+                    "timestamp": datetime.now().timestamp(),
+                    "best_perf": best_perf,
+                    "config": config,
                 }
                 torch.save(state, state_file)
 
@@ -343,76 +437,121 @@ def train():
                     if online_test:
                         test_player = TestPlayer()
 
-                    stat = test_player.test_play(test_games // 4, test_round, mortal, current_dqn, device)
+                    stat = test_player.test_play(
+                        test_games // 4, test_round, mortal, current_dqn, device
+                    )
                     mortal.train()
                     current_dqn.train()
                     test_end_time = time.time()
 
-                    avg_pt = stat.avg_pt([90, 45, 0, -135]) # for display only, never used in training
-                    better = avg_pt >= best_perf['avg_pt'] and stat.avg_rank <= best_perf['avg_rank']
+                    avg_pt = stat.avg_pt(
+                        [90, 45, 0, -135]
+                    )  # for display only, never used in training
+                    better = (
+                        avg_pt >= best_perf["avg_pt"]
+                        and stat.avg_rank <= best_perf["avg_rank"]
+                    )
                     if better:
                         past_best = best_perf.copy()
-                        best_perf['avg_pt'] = avg_pt
-                        best_perf['avg_rank'] = stat.avg_rank
+                        best_perf["avg_pt"] = avg_pt
+                        best_perf["avg_rank"] = stat.avg_rank
 
-                    logging.info(f'avg rank: {stat.avg_rank:.6}')
-                    logging.info(f'avg pt: {avg_pt:.6}')
-                    writer.add_scalar('test_play_tenhon/avg_ranking', stat.avg_rank, steps)
-                    writer.add_scalar('test_play_tenhon/avg_pt', avg_pt, steps)
-                    writer.add_scalars('test_play_tenhon/ranking', {
-                        '1st': stat.rank_1_rate,
-                        '2nd': stat.rank_2_rate,
-                        '3rd': stat.rank_3_rate,
-                        '4th': stat.rank_4_rate,
-                    }, steps)
-                    writer.add_scalars('test_play_tenhon/behavior', {
-                        'agari': stat.agari_rate,
-                        'houjuu': stat.houjuu_rate,
-                        'fuuro': stat.fuuro_rate,
-                        'riichi': stat.riichi_rate,
-                    }, steps)
-                    writer.add_scalars('test_play_tenhon/agari_point', {
-                        'overall': stat.avg_point_per_agari,
-                        'riichi': stat.avg_point_per_riichi_agari,
-                        'fuuro': stat.avg_point_per_fuuro_agari,
-                        'dama': stat.avg_point_per_dama_agari,
-                    }, steps)
-                    writer.add_scalar('test_play_tenhon/houjuu_point', stat.avg_point_per_houjuu, steps)
-                    writer.add_scalar('test_play_tenhon/point_per_round', stat.avg_point_per_round, steps)
-                    writer.add_scalars('test_play_tenhon/key_step', {
-                        'agari_jun': stat.avg_agari_jun,
-                        'houjuu_jun': stat.avg_houjuu_jun,
-                        'riichi_jun': stat.avg_riichi_jun,
-                    }, steps)
-                    writer.add_scalars('test_play_tenhon/riichi', {
-                        'agari_after_riichi': stat.agari_rate_after_riichi,
-                        'houjuu_after_riichi': stat.houjuu_rate_after_riichi,
-                        'chasing_riichi': stat.chasing_riichi_rate,
-                        'riichi_chased': stat.riichi_chased_rate,
-                    }, steps)
-                    writer.add_scalar('test_play_tenhon/riichi_point', stat.avg_riichi_point, steps)
-                    writer.add_scalars('test_play_tenhon/fuuro', {
-                        'agari_after_fuuro': stat.agari_rate_after_fuuro,
-                        'houjuu_after_fuuro': stat.houjuu_rate_after_fuuro,
-                    }, steps)
-                    writer.add_scalar('test_play_tenhon/fuuro_num', stat.avg_fuuro_num, steps)
-                    writer.add_scalar('test_play_tenhon/fuuro_point', stat.avg_fuuro_point, steps)
+                    logging.info(f"avg rank: {stat.avg_rank:.6}")
+                    logging.info(f"avg pt: {avg_pt:.6}")
                     writer.add_scalar(
-                            "time/test_time",
-                           (test_end_time - test_start_time)
-                                / test_games
-                                / test_round ,
-                            steps,
-                        )
+                        "test_play_tenhon/avg_ranking", stat.avg_rank, steps
+                    )
+                    writer.add_scalar("test_play_tenhon/avg_pt", avg_pt, steps)
+                    writer.add_scalars(
+                        "test_play_tenhon/ranking",
+                        {
+                            "1st": stat.rank_1_rate,
+                            "2nd": stat.rank_2_rate,
+                            "3rd": stat.rank_3_rate,
+                            "4th": stat.rank_4_rate,
+                        },
+                        steps,
+                    )
+                    writer.add_scalars(
+                        "test_play_tenhon/behavior",
+                        {
+                            "agari": stat.agari_rate,
+                            "houjuu": stat.houjuu_rate,
+                            "fuuro": stat.fuuro_rate,
+                            "riichi": stat.riichi_rate,
+                        },
+                        steps,
+                    )
+                    writer.add_scalars(
+                        "test_play_tenhon/agari_point",
+                        {
+                            "overall": stat.avg_point_per_agari,
+                            "riichi": stat.avg_point_per_riichi_agari,
+                            "fuuro": stat.avg_point_per_fuuro_agari,
+                            "dama": stat.avg_point_per_dama_agari,
+                        },
+                        steps,
+                    )
+                    writer.add_scalar(
+                        "test_play_tenhon/houjuu_point",
+                        stat.avg_point_per_houjuu,
+                        steps,
+                    )
+                    writer.add_scalar(
+                        "test_play_tenhon/point_per_round",
+                        stat.avg_point_per_round,
+                        steps,
+                    )
+                    writer.add_scalars(
+                        "test_play_tenhon/key_step",
+                        {
+                            "agari_jun": stat.avg_agari_jun,
+                            "houjuu_jun": stat.avg_houjuu_jun,
+                            "riichi_jun": stat.avg_riichi_jun,
+                        },
+                        steps,
+                    )
+                    writer.add_scalars(
+                        "test_play_tenhon/riichi",
+                        {
+                            "agari_after_riichi": stat.agari_rate_after_riichi,
+                            "houjuu_after_riichi": stat.houjuu_rate_after_riichi,
+                            "chasing_riichi": stat.chasing_riichi_rate,
+                            "riichi_chased": stat.riichi_chased_rate,
+                        },
+                        steps,
+                    )
+                    writer.add_scalar(
+                        "test_play_tenhon/riichi_point", stat.avg_riichi_point, steps
+                    )
+                    writer.add_scalars(
+                        "test_play_tenhon/fuuro",
+                        {
+                            "agari_after_fuuro": stat.agari_rate_after_fuuro,
+                            "houjuu_after_fuuro": stat.houjuu_rate_after_fuuro,
+                        },
+                        steps,
+                    )
+                    writer.add_scalar(
+                        "test_play_tenhon/fuuro_num", stat.avg_fuuro_num, steps
+                    )
+                    writer.add_scalar(
+                        "test_play_tenhon/fuuro_point", stat.avg_fuuro_point, steps
+                    )
+                    writer.add_scalar(
+                        "time/test_time",
+                        (test_end_time - test_start_time) / test_games / test_round,
+                        steps,
+                    )
                     writer.flush()
 
                     if better:
                         torch.save(state, state_file)
                         logging.info(
-                            'a new record has been made, '
+                            "a new record has been made, "
                             f'pt: {past_best["avg_pt"]:.4} -> {best_perf["avg_pt"]:.4}, '
                             f'rank: {past_best["avg_rank"]:.4} -> {best_perf["avg_rank"]:.4}, '
-                            f'saving to {best_state_file}'
+                            f"saving to {best_state_file}"
                         )
                         shutil.copy(state_file, best_state_file)
                     if online:
@@ -422,12 +561,12 @@ def train():
                         # in online mode instead of going for training directly.
                         sys.exit(0)
                 batch_start_time = now_time
-                pb = tqdm(total=save_every, desc='TRAIN')
+                pb = tqdm(total=save_every, desc="TRAIN")
         pb.close()
 
         if online:
             submit_param(None, mortal, current_dqn, is_idle=True)
-            logging.info('param has been submitted')
+            logging.info("param has been submitted")
 
     while True:
         train_epoch()
@@ -438,6 +577,7 @@ def train():
             # only run one epoch for offline for easier control
             break
 
+
 def main():
     import os
     import sys
@@ -446,30 +586,31 @@ def main():
     from config import config
 
     # do not set this env manually
-    is_sub_proc_key = 'MORTAL_IS_SUB_PROC'
-    online = config['control']['online']
-    if not online or os.environ.get(is_sub_proc_key, '0') == '1':
+    is_sub_proc_key = "MORTAL_IS_SUB_PROC"
+    online = config["control"]["online"]
+    if not online or os.environ.get(is_sub_proc_key, "0") == "1":
         train()
         return
 
     cmd = (sys.executable, __file__)
     env = {
-        is_sub_proc_key: '1',
+        is_sub_proc_key: "1",
         **os.environ.copy(),
     }
     while True:
         child = Popen(
             cmd,
-            stdin = sys.stdin,
-            stdout = sys.stdout,
-            stderr = sys.stderr,
-            env = env,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            env=env,
         )
         if (code := child.wait()) != 0:
             sys.exit(code)
         time.sleep(3)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
