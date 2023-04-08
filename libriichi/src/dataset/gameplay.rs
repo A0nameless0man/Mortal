@@ -7,8 +7,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::mem;
 
+use ahash::AHashSet;
 use anyhow::{bail, Context, Result};
-use boomphf::hashmap::BoomHashMap;
 use derivative::Derivative;
 use flate2::read::GzDecoder;
 use ndarray::prelude::*;
@@ -19,16 +19,6 @@ use serde_json as json;
 use tinyvec::ArrayVec;
 
 #[pyclass]
-#[pyo3(text_signature = "(
-    version,
-    *,
-    oracle = True,
-    player_names = None,
-    excludes = None,
-    trust_seed = False,
-    always_include_kan_select = True,
-    augmented = False,
-)")]
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct GameplayLoader {
@@ -48,9 +38,9 @@ pub struct GameplayLoader {
     augmented: bool,
 
     #[derivative(Debug = "ignore")]
-    player_names_set: BoomHashMap<String, ()>,
+    player_names_set: AHashSet<String>,
     #[derivative(Debug = "ignore")]
-    excludes_set: BoomHashMap<String, ()>,
+    excludes_set: AHashSet<String>,
 }
 
 #[pyclass]
@@ -89,15 +79,16 @@ struct LoaderContext<'a> {
 #[pymethods]
 impl GameplayLoader {
     #[new]
-    #[args(
-        "*",
-        oracle = "true",
-        player_names = "None",
-        excludes = "None",
-        trust_seed = "false",
-        always_include_kan_select = "true",
-        augmented = "false"
-    )]
+    #[pyo3(signature = (
+        version,
+        *,
+        oracle = true,
+        player_names = None,
+        excludes = None,
+        trust_seed = false,
+        always_include_kan_select = true,
+        augmented = false
+    ))]
     fn new(
         version: u32,
         oracle: bool,
@@ -107,15 +98,10 @@ impl GameplayLoader {
         always_include_kan_select: bool,
         augmented: bool,
     ) -> Self {
-        let mut player_names = player_names.unwrap_or_default();
-        player_names.sort_unstable();
-        player_names.dedup();
-        let player_names_set = BoomHashMap::new(player_names.clone(), vec![(); player_names.len()]);
-
-        let mut excludes = excludes.unwrap_or_default();
-        excludes.sort_unstable();
-        excludes.dedup();
-        let excludes_set = BoomHashMap::new(excludes.clone(), vec![(); excludes.len()]);
+        let player_names = player_names.unwrap_or_default();
+        let player_names_set = player_names.clone().into_iter().collect();
+        let excludes = excludes.unwrap_or_default();
+        let excludes_set = excludes.clone().into_iter().collect();
 
         Self {
             version,
@@ -131,7 +117,6 @@ impl GameplayLoader {
     }
 
     // Nested result is too hard to handle...
-    #[pyo3(text_signature = "($self, raw_log, /)")]
     fn load_log(&self, raw_log: &str) -> Result<Vec<Gameplay>> {
         let mut events = raw_log
             .lines()
@@ -145,7 +130,6 @@ impl GameplayLoader {
     }
 
     #[pyo3(name = "load_gz_log_files")]
-    #[pyo3(text_signature = "($self, gzip_filenames, /)")]
     fn load_gz_log_files_py(&self, gzip_filenames: Vec<String>) -> Result<Vec<Gameplay>> {
         self.load_gz_log_files(gzip_filenames)
     }
@@ -187,10 +171,10 @@ impl GameplayLoader {
                 .enumerate()
                 .filter(|(_, name)| {
                     if !self.player_names_set.is_empty() {
-                        return self.player_names_set.get_key_id(*name).is_some();
+                        return self.player_names_set.contains(*name);
                     }
                     if !self.excludes_set.is_empty() {
-                        return self.excludes_set.get_key_id(*name).is_none();
+                        return !self.excludes_set.contains(*name);
                     }
                     true
                 })
@@ -209,58 +193,47 @@ impl GameplayLoader {
 
 #[pymethods]
 impl Gameplay {
-    #[pyo3(text_signature = "($self, /)")]
     fn take_obs<'py>(&mut self, py: Python<'py>) -> Vec<&'py PyArray2<f32>> {
         mem::take(&mut self.obs)
             .into_iter()
             .map(|v| PyArray2::from_owned_array(py, v))
             .collect()
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_invisible_obs<'py>(&mut self, py: Python<'py>) -> Vec<&'py PyArray2<f32>> {
         mem::take(&mut self.invisible_obs)
             .into_iter()
             .map(|v| PyArray2::from_owned_array(py, v))
             .collect()
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_actions(&mut self) -> Vec<i64> {
         mem::take(&mut self.actions)
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_masks<'py>(&mut self, py: Python<'py>) -> Vec<&'py PyArray1<bool>> {
         mem::take(&mut self.masks)
             .into_iter()
             .map(|v| PyArray1::from_owned_array(py, v))
             .collect()
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_at_kyoku(&mut self) -> Vec<u8> {
         mem::take(&mut self.at_kyoku)
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_dones(&mut self) -> Vec<bool> {
         mem::take(&mut self.dones)
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_apply_gamma(&mut self) -> Vec<bool> {
         mem::take(&mut self.apply_gamma)
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_at_turns(&mut self) -> Vec<u8> {
         mem::take(&mut self.at_turns)
     }
-    #[pyo3(text_signature = "($self, /)")]
     fn take_shantens(&mut self) -> Vec<i8> {
         mem::take(&mut self.shantens)
     }
 
-    #[pyo3(text_signature = "($self, /)")]
     fn take_grp(&mut self) -> Grp {
         mem::take(&mut self.grp)
     }
 
-    #[pyo3(text_signature = "($self, /)")]
     const fn take_player_id(&self) -> u8 {
         self.player_id
     }
