@@ -320,14 +320,14 @@ impl BatchGame {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::agent::{BatchAgent, Tsumogiri};
+    use crate::agent::Tsumogiri;
 
     #[test]
     fn tsumogiri() {
         let g = BatchGame::tenhou_hanchan(true);
-        let mut agents: Vec<Box<dyn BatchAgent>> = vec![
-            Box::new(Tsumogiri::new_batched(&[0, 1, 2, 3]).unwrap()),
-            Box::new(Tsumogiri::new_batched(&[3, 2, 1, 0]).unwrap()),
+        let mut agents = [
+            Box::new(Tsumogiri::new_batched(&[0, 1, 2, 3]).unwrap()) as _,
+            Box::new(Tsumogiri::new_batched(&[3, 2, 1, 0]).unwrap()) as _,
         ];
         let indexes = &[
             [

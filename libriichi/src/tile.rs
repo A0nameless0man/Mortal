@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 
-use boomphf::hashmap::BoomHashMap;
+use ahash::AHashMap;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -17,19 +17,24 @@ const MJAI_PAI_STRINGS: [&str; MJAI_PAI_STRINGS_LEN] = [
     "?",   // unknown
 ];
 
-static MJAI_PAI_STRINGS_MAP: Lazy<BoomHashMap<&'static str, Tile>> = Lazy::new(|| {
-    let values = (0..MJAI_PAI_STRINGS_LEN)
-        .map(|id| Tile::try_from(id).unwrap())
-        .collect();
-    BoomHashMap::new(MJAI_PAI_STRINGS.to_vec(), values)
+static MJAI_PAI_STRINGS_MAP: Lazy<AHashMap<&'static str, Tile>> = Lazy::new(|| {
+    MJAI_PAI_STRINGS
+        .iter()
+        .enumerate()
+        .map(|(id, &s)| (s, Tile::try_from(id).unwrap()))
+        .collect()
 });
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Tile(u8);
 
-impl Tile {
-    const MAX: usize = MJAI_PAI_STRINGS_LEN - 1;
+#[derive(Debug)]
+pub enum InvalidTile {
+    Number(usize),
+    String(String),
+}
 
+impl Tile {
     /// # Safety
     /// Calling this method with an out-of-bounds tile ID is undefined behavior.
     #[inline]
@@ -157,10 +162,10 @@ impl Tile {
     }
 }
 
-#[derive(Debug)]
-pub enum InvalidTile {
-    Number(usize),
-    String(String),
+impl Default for Tile {
+    fn default() -> Self {
+        t!(?)
+    }
 }
 
 impl TryFrom<u8> for Tile {
@@ -175,7 +180,7 @@ impl TryFrom<usize> for Tile {
     type Error = InvalidTile;
 
     fn try_from(v: usize) -> Result<Self, Self::Error> {
-        if v > Tile::MAX {
+        if v >= MJAI_PAI_STRINGS_LEN {
             Err(InvalidTile::Number(v))
         } else {
             // SAFETY: `v` has been proven to be in bound.
@@ -246,6 +251,22 @@ impl Error for InvalidTile {}
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn convert() {
+        "E".parse::<Tile>().unwrap();
+        "5mr".parse::<Tile>().unwrap();
+        "?".parse::<Tile>().unwrap();
+        Tile::try_from(0_u8).unwrap();
+        Tile::try_from(36_u8).unwrap();
+        Tile::try_from(37_u8).unwrap();
+
+        "".parse::<Tile>().unwrap_err();
+        "0s".parse::<Tile>().unwrap_err();
+        "!".parse::<Tile>().unwrap_err();
+        Tile::try_from(38_u8).unwrap_err();
+        Tile::try_from(u8::MAX).unwrap_err();
+    }
 
     #[test]
     fn next_prev() {

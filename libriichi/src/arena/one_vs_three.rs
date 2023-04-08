@@ -1,8 +1,8 @@
 use super::game::{BatchGame, Index};
 use super::result::GameResult;
-use crate::agent::{AkochanAgent, BatchAgent, MortalBatchAgent};
+use crate::agent::{new_py_agent, AkochanAgent, BatchAgent};
 use std::fs::{self, File};
-use std::io::prelude::*;
+use std::io;
 use std::iter;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -15,11 +15,6 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 #[pyclass]
-#[pyo3(text_signature = "(
-    *,
-    disable_progress_bar = False,
-    log_dir = None,
-)")]
 #[derive(Clone, Default)]
 pub struct OneVsThree {
     pub disable_progress_bar: bool,
@@ -29,7 +24,7 @@ pub struct OneVsThree {
 #[pymethods]
 impl OneVsThree {
     #[new]
-    #[args("*", disable_progress_bar = "false", log_dir = "None")]
+    #[pyo3(signature = (*, disable_progress_bar=false, log_dir=None))]
     const fn new(disable_progress_bar: bool, log_dir: Option<String>) -> Self {
         Self {
             disable_progress_bar,
@@ -38,7 +33,6 @@ impl OneVsThree {
     }
 
     /// Returns the rankings of the challenger.
-    #[pyo3(text_signature = "($self, challenger, champion, seed_start, seed_count)")]
     pub fn py_vs_py(
         &self,
         challenger: PyObject,
@@ -52,8 +46,8 @@ impl OneVsThree {
         // tasks.
         py.allow_threads(move || {
             let results = self.run_batch(
-                |player_ids| MortalBatchAgent::new(challenger, player_ids),
-                |player_ids| MortalBatchAgent::new(champion, player_ids),
+                |player_ids| new_py_agent(challenger, player_ids),
+                |player_ids| new_py_agent(champion, player_ids),
                 seed_start,
                 seed_count,
             )?;
@@ -68,7 +62,6 @@ impl OneVsThree {
     }
 
     /// Returns the rankings of the challenger (akochan in this case).
-    #[pyo3(text_signature = "($self, engine, seed_start, seed_count)")]
     pub fn ako_vs_py(
         &self,
         engine: PyObject,
@@ -78,8 +71,8 @@ impl OneVsThree {
     ) -> Result<[i32; 4]> {
         py.allow_threads(move || {
             let results = self.run_batch(
-                AkochanAgent::new_batched,
-                |player_ids| MortalBatchAgent::new(engine, player_ids),
+                |player_ids| AkochanAgent::new_batched(player_ids).map(|a| Box::new(a) as _),
+                |player_ids| new_py_agent(engine, player_ids),
                 seed_start,
                 seed_count,
             )?;
@@ -94,7 +87,6 @@ impl OneVsThree {
     }
 
     /// Returns the rankings of the challenger (python agent in this case).
-    #[pyo3(text_signature = "($self, engine, seed_start, seed_count)")]
     pub fn py_vs_ako(
         &self,
         engine: PyObject,
@@ -104,8 +96,8 @@ impl OneVsThree {
     ) -> Result<[i32; 4]> {
         py.allow_threads(move || {
             let results = self.run_batch(
-                |player_ids| MortalBatchAgent::new(engine, player_ids),
-                AkochanAgent::new_batched,
+                |player_ids| new_py_agent(engine, player_ids),
+                |player_ids| AkochanAgent::new_batched(player_ids).map(|a| Box::new(a) as _),
                 seed_start,
                 seed_count,
             )?;
@@ -121,7 +113,7 @@ impl OneVsThree {
 }
 
 impl OneVsThree {
-    pub fn run_batch<C, M, CA, MA>(
+    pub fn run_batch<C, M>(
         &self,
         new_challenger_agent: C,
         new_champion_agent: M,
@@ -129,10 +121,8 @@ impl OneVsThree {
         seed_count: u64,
     ) -> Result<Vec<GameResult>>
     where
-        C: FnOnce(&[u8]) -> Result<CA>,
-        M: FnOnce(&[u8]) -> Result<MA>,
-        CA: BatchAgent + 'static,
-        MA: BatchAgent + 'static,
+        C: FnOnce(&[u8]) -> Result<Box<dyn BatchAgent>>,
+        M: FnOnce(&[u8]) -> Result<Box<dyn BatchAgent>>,
     {
         if let Some(dir) = &self.log_dir {
             fs::create_dir_all(dir)?;
@@ -152,52 +142,51 @@ impl OneVsThree {
             .collect();
 
         let challenger_player_ids: Vec<_> = (0..4).cycle().take(seed_count as usize * 4).collect();
-        let champion_player_ids: Vec<_> = [
-            1, 2, 3, // A
-            0, 2, 3, // B
-            0, 1, 3, // C
-            0, 1, 2, // D
-        ]
-        .into_iter()
-        .cycle()
-        .take(seed_count as usize * 4 * 3)
-        .collect();
 
-        let mut agents: [Box<dyn BatchAgent>; 2] = [
-            Box::new(new_challenger_agent(&challenger_player_ids)?),
-            Box::new(new_champion_agent(&champion_player_ids)?),
+        let champion_player_ids_per_seed = [
+            1, 2, 3, // split A
+            0, 2, 3, // split B
+            0, 1, 3, // split C
+            0, 1, 2, // split D
+        ];
+        let champion_player_ids: Vec<_> = champion_player_ids_per_seed
+            .into_iter()
+            .cycle()
+            .take(seed_count as usize * champion_player_ids_per_seed.len())
+            .collect();
+
+        let mut agents = [
+            new_challenger_agent(&challenger_player_ids)?,
+            new_champion_agent(&champion_player_ids)?,
         ];
         let batch_game = BatchGame::tenhou_hanchan(self.disable_progress_bar);
 
         let mut challenger_idx = 0;
         let mut champion_idx = 0;
-        let mut make_idx_group = |agent_idxs: [_; 4]| {
-            agent_idxs.map(|agent_idx| {
-                let player_id_idx = if agent_idx == 0 {
-                    &mut challenger_idx
-                } else {
-                    &mut champion_idx
-                };
-                let ret = Index {
-                    agent_idx,
-                    player_id_idx: *player_id_idx,
-                };
-                *player_id_idx += 1;
-                ret
-            })
-        };
-        let indexes: Vec<_> = (0..seed_count)
-            .flat_map(|_| {
-                [
-                    // split A
-                    make_idx_group([0, 1, 1, 1]),
-                    // split B
-                    make_idx_group([1, 0, 1, 1]),
-                    // split C
-                    make_idx_group([1, 1, 0, 1]),
-                    // split D
-                    make_idx_group([1, 1, 1, 0]),
-                ]
+        let agent_idxs_per_seed = [
+            [0, 1, 1, 1], // split A
+            [1, 0, 1, 1], // split B
+            [1, 1, 0, 1], // split C
+            [1, 1, 1, 0], // split D
+        ];
+        let indexes: Vec<_> = agent_idxs_per_seed
+            .into_iter()
+            .cycle()
+            .take(seed_count as usize * agent_idxs_per_seed.len())
+            .map(|agent_idxs_per_split| {
+                agent_idxs_per_split.map(|agent_idx| {
+                    let player_id_idx = if agent_idx == 0 {
+                        &mut challenger_idx
+                    } else {
+                        &mut champion_idx
+                    };
+                    let ret = Index {
+                        agent_idx,
+                        player_id_idx: *player_id_idx,
+                    };
+                    *player_id_idx += 1;
+                    ret
+                })
             })
             .collect();
 
@@ -221,24 +210,15 @@ impl OneVsThree {
                 .enumerate()
                 .try_for_each(|(i, game_result)| {
                     let split_name = ["a", "b", "c", "d"][i % 4];
-                    let filename: PathBuf = [
-                        dir,
-                        &format!(
-                            "{}_{}_{split_name}.json.gz",
-                            game_result.seed.0, game_result.seed.1,
-                        ),
-                    ]
-                    .iter()
-                    .collect();
+                    let (seed, key) = game_result.seed;
+                    let filename: PathBuf = [dir, &format!("{seed}_{key}_{split_name}.json.gz")]
+                        .iter()
+                        .collect();
 
                     let log = game_result.dump_json_log()?;
                     let mut comp = GzEncoder::new(log.as_bytes(), Compression::best());
-                    let mut data = vec![];
-                    comp.read_to_end(&mut data)?;
-
                     let mut f = File::create(filename)?;
-                    f.write_all(&data)?;
-                    f.sync_all()?;
+                    io::copy(&mut comp, &mut f)?;
 
                     anyhow::Ok(())
                 })?;

@@ -17,17 +17,18 @@ use boomphf::hashmap::BoomHashMap;
 use byteorder::{LittleEndian, ReadBytesExt};
 use flate2::read::GzDecoder;
 use once_cell::sync::Lazy;
+use tinyvec::ArrayVec;
 
 const AGARI_TABLE_SIZE: usize = 9_362;
 
-static AGARI_TABLE: Lazy<BoomHashMap<u32, Vec<Div>>> = Lazy::new(|| {
-    let mut raw = GzDecoder::new(&include_bytes!("data/agari.bin.gz")[..]);
+static AGARI_TABLE: Lazy<BoomHashMap<u32, ArrayVec<[Div; 4]>>> = Lazy::new(|| {
+    let mut raw = GzDecoder::new(include_bytes!("data/agari.bin.gz").as_slice());
 
     let (keys, values): (Vec<_>, Vec<_>) = (0..AGARI_TABLE_SIZE)
         .map(|_| {
             let key = raw.read_u32::<LittleEndian>().unwrap();
             let v_size = raw.read_u8().unwrap();
-            let value: Vec<_> = (0..v_size)
+            let value = (0..v_size)
                 .map(|_| raw.read_u32::<LittleEndian>().unwrap())
                 .map(Div::from)
                 .collect();
@@ -49,11 +50,11 @@ static AGARI_TABLE: Lazy<BoomHashMap<u32, Vec<Div>>> = Lazy::new(|| {
     BoomHashMap::new(keys, values)
 });
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Div {
     pair_idx: u8,
-    kotsu_idxs: Vec<u8>,
-    shuntsu_idxs: Vec<u8>,
+    kotsu_idxs: ArrayVec<[u8; 4]>,
+    shuntsu_idxs: ArrayVec<[u8; 4]>,
     has_chitoi: bool,
     has_chuuren: bool,
     has_ittsuu: bool,
@@ -94,13 +95,13 @@ pub struct AgariCalculator<'a> {
     pub is_ron: bool,
 }
 
-struct DivWorker<'sup, 'a> {
-    sup: &'a AgariCalculator<'sup>,
+struct DivWorker<'a> {
+    sup: &'a AgariCalculator<'a>,
     tile14: &'a [u8; 14],
     div: &'a Div,
     pair_tile: u8,
-    menzen_kotsu: Vec<u8>,
-    menzen_shuntsu: Vec<u8>,
+    menzen_kotsu: ArrayVec<[u8; 4]>,
+    menzen_shuntsu: ArrayVec<[u8; 4]>,
 
     /// Used in fu calc and sanankou condition.
     ///
@@ -119,12 +120,12 @@ impl From<u32> for Div {
         let pair_idx = ((v >> 6) & 0b1111) as u8;
 
         let kotsu_count = v & 0b111;
-        let kotsu_idxs: Vec<_> = (0..kotsu_count)
+        let kotsu_idxs = (0..kotsu_count)
             .map(|i| ((v >> (10 + i * 4)) & 0b1111) as u8)
             .collect();
 
         let shuntsu_count = (v >> 3) & 0b111;
-        let shuntsu_idxs: Vec<_> = (kotsu_count..kotsu_count + shuntsu_count)
+        let shuntsu_idxs = (kotsu_count..kotsu_count + shuntsu_count)
             .map(|i| ((v >> (10 + i * 4)) & 0b1111) as u8)
             .collect();
 
@@ -150,8 +151,8 @@ impl From<u32> for Div {
 impl PartialEq for Agari {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Agari::Yakuman(l), Agari::Yakuman(r)) => l == r,
-            (Agari::Normal { fu: lf, han: lh }, Agari::Normal { fu: rf, han: rh }) => {
+            (Self::Yakuman(l), Self::Yakuman(r)) => l == r,
+            (Self::Normal { fu: lf, han: lh }, Self::Normal { fu: rf, han: rh }) => {
                 lf == rf && lh == rh
             }
             _ => false,
@@ -168,10 +169,10 @@ impl PartialOrd for Agari {
 impl Ord for Agari {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Agari::Yakuman(l), Agari::Yakuman(r)) => l.cmp(r),
-            (Agari::Yakuman(_), Agari::Normal { .. }) => Ordering::Greater,
-            (Agari::Normal { .. }, Agari::Yakuman(..)) => Ordering::Less,
-            (Agari::Normal { fu: lf, han: lh }, Agari::Normal { fu: rf, han: rh }) => {
+            (Self::Yakuman(l), Self::Yakuman(r)) => l.cmp(r),
+            (Self::Yakuman(_), Self::Normal { .. }) => Ordering::Greater,
+            (Self::Normal { .. }, Self::Yakuman(..)) => Ordering::Less,
+            (Self::Normal { fu: lf, han: lh }, Self::Normal { fu: rf, han: rh }) => {
                 match lh.cmp(rh) {
                     Ordering::Equal => lf.cmp(rf),
                     v => v,
@@ -185,8 +186,8 @@ impl Agari {
     #[must_use]
     pub fn into_point(self, is_oya: bool) -> Point {
         match self {
-            Agari::Normal { fu, han } => Point::calc(fu, han, is_oya),
-            Agari::Yakuman(n) => Point::yakuman(is_oya, n as i32),
+            Self::Normal { fu, han } => Point::calc(fu, han, is_oya),
+            Self::Yakuman(n) => Point::yakuman(is_oya, n as i32),
         }
     }
 }
@@ -275,15 +276,15 @@ impl AgariCalculator<'_> {
     }
 }
 
-impl<'sup, 'a> DivWorker<'sup, 'a> {
-    fn new(calc: &'a AgariCalculator<'sup>, tile14: &'a [u8; 14], div: &'a Div) -> Self {
+impl<'a> DivWorker<'a> {
+    fn new(calc: &'a AgariCalculator<'a>, tile14: &'a [u8; 14], div: &'a Div) -> Self {
         let pair_tile = tile14[div.pair_idx as usize];
-        let menzen_kotsu: Vec<_> = div
+        let menzen_kotsu = div
             .kotsu_idxs
             .iter()
             .map(|&idx| tile14[idx as usize])
             .collect();
-        let menzen_shuntsu: Vec<_> = div
+        let menzen_shuntsu = div
             .shuntsu_idxs
             .iter()
             .map(|&idx| tile14[idx as usize])
@@ -563,7 +564,7 @@ impl<'sup, 'a> DivWorker<'sup, 'a> {
                 && self.sup.is_menzen
                 && self.menzen_shuntsu.len() >= 2
             {
-                let mut shuntsu_marks = [0u8; 3];
+                let mut shuntsu_marks = [0_u8; 3];
                 let has_ipeikou = self.menzen_shuntsu.iter().any(|&t| {
                     let kind = t as usize / 9;
                     let num = t % 9;
@@ -649,12 +650,7 @@ impl<'sup, 'a> DivWorker<'sup, 'a> {
             let has_ryuisou = self
                 .all_kotsu_and_kantsu()
                 .chain(iter::once(self.pair_tile))
-                .all(|k| {
-                    matches_tu8!(
-                        k,
-                        2s | 3s | 4s | 6s | 8s | F
-                    )
-                })
+                .all(|k| matches_tu8!(k, 2s | 3s | 4s | 6s | 8s | F))
                 && self.all_shuntsu().all(|s| s == tu8!(2s)); // only 234s is possible for shuntsu in ryuisou
             if has_ryuisou {
                 // 緑一色
@@ -758,7 +754,6 @@ fn get_tile14_and_key(tiles: &[u8; 34]) -> ([u8; 14], u32) {
     let mut tile14_iter = tile14.iter_mut();
     let mut key = 0;
 
-    // let mut tile14_idx = 0;
     let mut bit_idx = -1;
     let mut prev_in_hand = None;
     for (kind, chunk) in tiles.chunks_exact(9).enumerate() {
@@ -875,9 +870,7 @@ pub fn check_ankan_after_riichi(tehai: &[u8; 34], len_div3: u8, tile: Tile, stri
             tehai_after[tile_id] = 0;
             tehai_after[wait] += 1;
             let (_, key) = get_tile14_and_key(&tehai_after);
-            let divs_after = if let Some(divs) = AGARI_TABLE.get(&key) {
-                divs
-            } else {
+            let Some(divs_after) = AGARI_TABLE.get(&key) else {
                 // The wait tile set will get smaller after kan.
                 return false;
             };
@@ -943,7 +936,7 @@ mod test {
         test_one("23m 999p 33345666s", "9p", 4, true, true);
 
         // The 1m kan will make chuuren gone, but in this impl we don't take
-        // yaku into acccount.
+        // yaku into account.
         test_one("1113445678999m", "1m", 4, true, true);
         test_one("1113445678999m", "9m", 4, true, false);
     }
