@@ -155,11 +155,11 @@ def train():
 
         return calc
 
-    norm_scheduler = stage_scheduler(**norm_scheduler_config)
-    optim_size_scheduler =  stage_scheduler(**config["optim_size"]["scheduler"])
+    norm_scheduler = stage_scheduler(norm_scheduler_config)
+    optim_size_scheduler =  stage_scheduler(config["optim_size"]["scheduler"])
     base_norm_momentum = norm_config.get("momentum", 0)
     scheduler = optim.lr_scheduler.LambdaLR(
-        optimizer, stage_scheduler(**config["optim"]["scheduler"])
+        optimizer, stage_scheduler(config["optim"]["scheduler"])
     )
 
     # scheduler = StepLR
