@@ -112,7 +112,7 @@ def train():
 
     file_index = cfg['dataset']['file_index']
     train_globs = cfg['dataset']['train_globs']
-    val_cnt = cfg['dataset']['val_cnt']
+    val_cnt = int(cfg['dataset']['val_cnt'])
     if path.exists(file_index):
         index = torch.load(file_index)
         train_file_list = index['train_file_list']
