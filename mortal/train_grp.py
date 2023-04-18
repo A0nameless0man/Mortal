@@ -256,7 +256,7 @@ def train():
                 stats[k] = 0
             approx_percent = steps * batch_size / (len(train_file_list) * 10) * 100
             logging.info(f"total steps: {steps:,} est. {approx_percent:6.3f}%")
-            logging.info(f"now acc: {val_acc::.3} best acc. {best_acc:.3}")
+            logging.info(f"now acc: {val_acc:.3} best acc. {best_acc:.3}")
 
             state = {
                 "model": grp.state_dict(),
