@@ -112,7 +112,7 @@ def train():
 
     file_index = cfg['dataset']['file_index']
     train_globs = cfg['dataset']['train_globs']
-    val_globs = cfg['dataset']['val_globs']
+    val_cnt = cfg['dataset']['val_cnt']
     if path.exists(file_index):
         index = torch.load(file_index)
         train_file_list = index['train_file_list']
@@ -123,8 +123,9 @@ def train():
         val_file_list = []
         for pat in train_globs:
             train_file_list.extend(glob(pat, recursive=True))
-        for pat in val_globs:
-            val_file_list.extend(glob(pat, recursive=True))
+        random.shuffle(train_file_list)
+        val_file_list = train_file_list[:val_cnt]
+        train_file_list = train_file_list[val_cnt:]
         train_file_list.sort(reverse=True)
         val_file_list.sort(reverse=True)
         torch.save({'train_file_list': train_file_list, 'val_file_list': val_file_list}, file_index)
