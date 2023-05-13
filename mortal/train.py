@@ -37,6 +37,7 @@ def train():
     from model import Brain, DQN, NextRankPredictor
     from libriichi.consts import obs_shape
     from config import config
+    from lr_scheduler import stage_scheduler
 
     version = config["control"]["version"]
 
@@ -109,52 +110,6 @@ def train():
 
     norm_scheduler_config = config["norm"]["scheduler"]
 
-    def step_scheduler(step_size: int, gamma: float, **kargs) -> Callable[[int], float]:
-        def calc(step: int) -> float:
-            return gamma ** (step // step_size)
-
-        return calc
-
-    def exp_step_scheduler(
-        step_size: int, gamma: float, **kargs
-    ) -> Callable[[int], float]:
-        def calc(step: int) -> float:
-            return gamma ** math.log(step // step_size, 2)
-
-        return calc
-
-    def stage_scheduler_step(
-        left=0, right=-1, type="step", **kargs
-    ) -> Callable[[int], float]:
-        match type:
-            case "step":
-                internal_calc = step_scheduler(**kargs)
-            case "exp_step":
-                internal_calc = exp_step_scheduler(**kargs)
-            case _:
-                internal_calc = lambda x: float(1)
-
-        def calc(step: int):
-            if step <= left:
-                return 1
-            if left != -1 and step > right:
-                step = right
-            step -= left
-            return internal_calc(step)
-
-        return calc
-
-    def stage_scheduler(stages: List[dict]) -> Callable[[int], float]:
-        funcs = [stage_scheduler_step(**args) for args in stages]
-
-        def calc(step: int):
-            gamma = 1.0
-            for f in funcs:
-                gamma *= f(step)
-            return gamma
-
-        return calc
-
     norm_scheduler = stage_scheduler(norm_scheduler_config)
     optim_size_scheduler =  stage_scheduler(config["optim_size"]["scheduler"])
     base_norm_momentum = norm_config.get("momentum", 0)
@@ -184,7 +139,7 @@ def train():
         next_rank_pred.load_state_dict(state["next_rank_pred"])
         if not online or state["config"]["control"]["online"]:
             optimizer.load_state_dict(state["optimizer"])
-            # scheduler.load_state_dict(state["scheduler"])
+            scheduler.load_state_dict(state["scheduler"])
         scaler.load_state_dict(state["scaler"])
         best_perf = state["best_perf"]
         steps = state["steps"]
@@ -606,7 +561,8 @@ def main():
             env=env,
         )
         if (code := child.wait()) != 0:
-            sys.exit(code)
+            # sys.exit(code)
+            pass
         time.sleep(3)
 
 

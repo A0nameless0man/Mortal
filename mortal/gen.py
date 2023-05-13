@@ -1,3 +1,6 @@
+from lr_scheduler import stage_scheduler
+
+
 def gen():
     import prelude
 
@@ -56,7 +59,9 @@ def gen():
     ]
     optimizer = optim.AdamW(param_groups, lr=lr, weight_decay=0, betas=betas, eps=eps)
     scaler = GradScaler()
-
+    scheduler = optim.lr_scheduler.LambdaLR(
+        optimizer, stage_scheduler(config["optim"]["scheduler"])
+    )
     steps = 0
     state_file = config["control"]["state_file"]
     optimizer.zero_grad(set_to_none=True)
@@ -70,6 +75,7 @@ def gen():
         'current_dqn': current_dqn.state_dict(),
         'next_rank_pred': next_rank_pred.state_dict(),
         'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
         'scaler': scaler.state_dict(),
         'steps': steps,
         'timestamp': datetime.now().timestamp(),
