@@ -38,6 +38,7 @@ def train():
     from libriichi.consts import obs_shape
     from config import config
     from lr_scheduler import stage_scheduler
+    from tqdm.contrib.logging import logging_redirect_tqdm
 
     version = config["control"]["version"]
 
@@ -111,7 +112,7 @@ def train():
     norm_scheduler_config = config["norm"]["scheduler"]
 
     norm_scheduler = stage_scheduler(norm_scheduler_config)
-    optim_size_scheduler =  stage_scheduler(config["optim_size"]["scheduler"])
+    optim_size_scheduler = stage_scheduler(config["optim_size"]["scheduler"])
     base_norm_momentum = norm_config.get("momentum", 0)
     scheduler = optim.lr_scheduler.LambdaLR(
         optimizer, stage_scheduler(config["optim"]["scheduler"])
@@ -144,7 +145,7 @@ def train():
         best_perf = state["best_perf"]
         steps = state["steps"]
     mortal.set_bn_momentum(base_norm_momentum * norm_scheduler(steps))
-    opt_step_every = int(base_opt_step_every*optim_size_scheduler(steps))
+    opt_step_every = int(base_opt_step_every * optim_size_scheduler(steps))
 
     freeze_bn_val: bool = config["freeze_bn"]["mortal"]
     freeze_bn_cycles: list[int] = config["freeze_bn"]["cycle"]
@@ -188,6 +189,27 @@ def train():
     )
     idx = 0
     batch_start_time = time.time()
+    pb_test = tqdm(
+        total=test_every,
+        desc="TEST",
+        initial=steps % test_every,
+        position=0,
+        leave=False,
+    )
+    pb = tqdm(
+        total=save_every,
+        desc="SAVE",
+        initial=steps % save_every,
+        position=1,
+        leave=False,
+    )
+    pb_submit = tqdm(
+        total=submit_every,
+        desc="SUBMIT",
+        initial=(steps % submit_every),
+        position=2,
+        leave=False,
+    )
 
     def train_epoch():
         nonlocal steps
@@ -196,6 +218,9 @@ def train():
         nonlocal test_player
         nonlocal batch_start_time
         nonlocal opt_step_every
+        nonlocal pb
+        nonlocal pb_submit
+        nonlocal pb_test
 
         player_names = []
         if online:
@@ -229,10 +254,7 @@ def train():
                     file_list = filtered
                 file_list.sort(reverse=True)
                 torch.save({"file_list": file_list}, file_index)
-        logging.info(f"file list size: {len(file_list):,}")
-
-        before_next_test_play = (test_every - steps % test_every) % test_every
-        logging.info(f"total steps: {steps:,} (~{before_next_test_play:,})")
+        logging.info(f"file list size: {len(file_list):,} total steps: {steps:,}")
 
         if num_workers > 1:
             random.shuffle(file_list)
@@ -256,8 +278,6 @@ def train():
                 worker_init_fn=worker_init_fn,
             )
         )
-
-        pb = tqdm(total=save_every, desc="TRAIN", initial=steps % save_every)
         for (
             obs,
             actions,
@@ -312,9 +332,11 @@ def train():
                 optimizer.zero_grad(set_to_none=True)
             scheduler.step()
             pb.update(1)
+            pb_test.update(1)
+            pb_submit.update(1)
 
             mortal.set_bn_momentum(base_norm_momentum * norm_scheduler(steps))
-            opt_step_every = int(base_opt_step_every*optim_size_scheduler(steps))
+            opt_step_every = int(base_opt_step_every * optim_size_scheduler(steps))
             if (
                 freeze_bn_cycle != 0
                 and steps % freeze_bn_cycle in freeze_bn_change_step
@@ -330,8 +352,11 @@ def train():
                 logging.info(f"freeze_bn_val: {freeze_bn_val}")
 
             if online and steps % submit_every == 0:
+                pb_submit.close()
+                pb_submit = tqdm(
+                    total=submit_every, desc="SUBMIT", position=2, leave=False
+                )
                 submit_param(None, mortal, current_dqn, is_idle=False)
-                logging.info("param has been submitted")
                 writer.add_scalar(
                     "layer/freeze_bn", 1.0 if freeze_bn_val else 0.0, steps
                 )
@@ -388,6 +413,8 @@ def train():
                 torch.save(state, state_file)
 
                 if steps % test_every == 0:
+                    pb_test.close()
+                    pb_submit.close()
                     test_start_time = time.time()
                     if online_test:
                         test_player = TestPlayer()
@@ -515,22 +542,35 @@ def train():
                         # is the reason why `main` spawns a sub process to train
                         # in online mode instead of going for training directly.
                         sys.exit(0)
+                    pb_test = tqdm(
+                        total=test_every,
+                        desc="TEST",
+                        initial=steps % test_every,
+                        position=0,
+                        leave=False,
+                    )
                 batch_start_time = now_time
-                pb = tqdm(total=save_every, desc="TRAIN")
-        pb.close()
-
+                pb = tqdm(total=save_every, desc="SAVE", position=1, leave=False)
         if online:
+            pb_submit.close()
+            pb_submit = tqdm(
+                total=submit_every,
+                desc="SUBMIT",
+                initial=(steps % submit_every),
+                position=2,
+                leave=False,
+            )
             submit_param(None, mortal, current_dqn, is_idle=True)
-            logging.info("param has been submitted")
 
-    while True:
-        train_epoch()
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        if not online:
-            # only run one epoch for offline for easier control
-            break
+    with logging_redirect_tqdm():
+        while True:
+            train_epoch()
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            if not online:
+                # only run one epoch for offline for easier control
+                break
 
 
 def main():
