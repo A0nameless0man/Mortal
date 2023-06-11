@@ -395,9 +395,6 @@ def train():
                     stats[k] = 0
                 idx = 0
 
-                before_next_test_play = (test_every - steps % test_every) % test_every
-                logging.info(f"total steps: {steps:,} (~{before_next_test_play:,})")
-
                 state = {
                     "mortal": mortal.state_dict(),
                     "current_dqn": current_dqn.state_dict(),
