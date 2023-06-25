@@ -189,25 +189,31 @@ def train():
     )
     idx = 0
     batch_start_time = time.time()
+    pb_total = tqdm(
+        desc="TOTAL",
+        initial=steps,
+        position=0,
+        leave=False,
+    )
     pb_test = tqdm(
         total=test_every,
         desc="TEST",
         initial=steps % test_every,
-        position=0,
+        position=1,
         leave=False,
     )
     pb = tqdm(
         total=save_every,
         desc="SAVE",
         initial=steps % save_every,
-        position=1,
+        position=2,
         leave=False,
     )
     pb_submit = tqdm(
         total=submit_every,
         desc="SUBMIT",
         initial=(steps % submit_every),
-        position=2,
+        position=3,
         leave=False,
     )
 
@@ -334,6 +340,7 @@ def train():
             pb.update(1)
             pb_test.update(1)
             pb_submit.update(1)
+            pb_total.update(1)
 
             mortal.set_bn_momentum(base_norm_momentum * norm_scheduler(steps))
             opt_step_every = int(base_opt_step_every * optim_size_scheduler(steps))
@@ -354,7 +361,7 @@ def train():
             if online and steps % submit_every == 0:
                 pb_submit.close()
                 pb_submit = tqdm(
-                    total=submit_every, desc="SUBMIT", position=2, leave=False
+                    total=submit_every, desc="SUBMIT", position=3, leave=False
                 )
                 submit_param(None, mortal, current_dqn, is_idle=False)
                 writer.add_scalar(
@@ -543,18 +550,18 @@ def train():
                         total=test_every,
                         desc="TEST",
                         initial=steps % test_every,
-                        position=0,
+                        position=1,
                         leave=False,
                     )
                 batch_start_time = now_time
-                pb = tqdm(total=save_every, desc="SAVE", position=1, leave=False)
+                pb = tqdm(total=save_every, desc="SAVE", position=2, leave=False)
         if online:
             pb_submit.close()
             pb_submit = tqdm(
                 total=submit_every,
                 desc="SUBMIT",
                 initial=(steps % submit_every),
-                position=2,
+                position=3,
                 leave=False,
             )
             submit_param(None, mortal, current_dqn, is_idle=True)
